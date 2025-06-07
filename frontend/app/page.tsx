@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card" // Assuming these are still in components/ui
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DollarSign, ArrowUpRight, ArrowDownRight } from "lucide-react"
 import { useRouter } from 'next/navigation';
 
@@ -33,6 +33,8 @@ import {
   Play,
   Volume2,
   TrendingDown,
+  History, // Added History icon
+  SquarePen // Added for New Chat / Edit (like Grok)
 } from "lucide-react"
 
 
@@ -142,9 +144,9 @@ function TradingDashboardContent() {
 
   // --- STATE VARIABLES ---
   const [activeView, setActiveView] = useState("dashboard")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false) // Left sidebar toggle
   const [currentAlert, setCurrentAlert] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
-  const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false);
+  const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false); // Right overlay sidebar toggle
 
 
   // Market Data (for Dashboard and Analysis Live Price)
@@ -212,21 +214,20 @@ function TradingDashboardContent() {
 
   const availableTimeframes = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
   const availableIndicators = [
-    { name: "RSI", desc: "Relative Strength Index" },
+    { name: "RSI", desc: "Relative Sth Index" },
     { name: "Stochastic Oscillator", desc: "Momentum oscillator" },
     { name: "MACD", desc: "Moving Average Convergence" },
     { name: "Moving Averages", desc: "SMA/EMA trends" },
     { name: "Bollinger Bands", desc: "Volatility bands" },
-    { name: "Stochastic Oscillator", desc: "Momentum oscillator" },
     { name: "Volume", desc: "Trading volume analysis" },
     { name: "ATR", desc: "Average True Range" },
     { name: "Fibonacci Retracements", desc: "Key structural levels" },
   ]
 
 
-  // --- HANDLERS (MOVED UP FOR DEFINITION ORDER) ---
+  // --- HANDLERS ---
 
-  // Handle creating a new conversation - MOVED UP
+  // Handle creating a new conversation
   const handleNewConversation = useCallback(async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
@@ -244,7 +245,7 @@ function TradingDashboardContent() {
       setCurrentChatSessionId(newSessionRef.id);
       setMessageInput('');
       setChatMessages([]);
-      setIsChatHistoryMobileOpen(false);
+      setIsChatHistoryMobileOpen(false); // Close history sidebar if open
       setCurrentAlert({ message: "New conversation started! Type your first message.", type: "success" });
       console.log("DIAG: New chat session created with ID:", newSessionRef.id);
 
@@ -264,10 +265,10 @@ function TradingDashboardContent() {
     }
   }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
-  // Handle switching active conversation - MOVED UP
+  // Handle switching active conversation
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
-    setIsChatHistoryMobileOpen(false);
+    setIsChatHistoryMobileOpen(false); // Close history sidebar on switch
     setMessageInput('');
     setCurrentAlert({ message: "Switched to selected conversation.", type: "info" });
     console.log("DIAG: Switched to conversation ID:", sessionId);
@@ -357,7 +358,7 @@ function TradingDashboardContent() {
     }
   };
 
-  // Handle saving settings - NOW PERSISTENT WITH FIRESTORE
+  // Handle saving settings
   const handleSaveSettings = async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot save settings.", type: "warning" });
@@ -390,7 +391,7 @@ function TradingDashboardContent() {
     }
   };
 
-  // Handle logging a new trade - NOW PERSISTENT WITH FIRESTORE
+  // Handle logging a new trade
   const handleLogTrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
@@ -525,7 +526,7 @@ function TradingDashboardContent() {
   };
 
 
-  // --- USE EFFECTS --- (Now placed AFTER all handlers that might be called on initial render)
+  // --- USE EFFECTS ---
 
   // Effect for fetching chat sessions
   useEffect(() => {
@@ -544,14 +545,9 @@ function TradingDashboardContent() {
             setCurrentChatSessionId(sessions[0].id);
             console.log("DIAG: Setting currentChatSessionId to most recent:", sessions[0].id);
           } else {
-            setCurrentChatSessionId(null);
+            setCurrentChatSessionId(null); // No sessions, so no current chat
             console.log("DIAG: No chat sessions found, setting currentChatSessionId to null.");
-            // Call handleNewConversation only if it's already defined
-            if (typeof handleNewConversation === 'function') { // Added a check
-              handleNewConversation();
-            } else {
-              console.warn("DIAG: handleNewConversation not yet defined when attempting to call from useEffect. This should self-correct on next render.");
-            }
+            // We won't automatically create a new chat here; the user will click "New Chat" from the empty state
           }
         }
       }, (error: any) => {
@@ -566,7 +562,7 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, handleNewConversation, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]); // Removed handleNewConversation from dep array
 
 
   // Effect for fetching messages of the currently active chat session
@@ -720,6 +716,7 @@ function TradingDashboardContent() {
     }
   }, []);
 
+
   useEffect(() => {
     if (activeView === 'analysis') {
       fetchAnalysisLivePrice(analysisCurrencyPair);
@@ -731,61 +728,7 @@ function TradingDashboardContent() {
 
   return (
     <div className="flex h-screen bg-gray-900 text-white">
-      {/* Custom CSS for scrollbar and mobile overlay */}
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #4a5568; /* Tailwind gray-700 */
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #667eea; /* Tailwind indigo-500 */
-            border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #5a67d8; /* Darker indigo */
-        }
-        /* For Firefox */
-        .custom-scrollbar {
-            scrollbar-width: thin;
-            scrollbar-color: #667eea #4a5568;
-        }
-
-        /* Mobile Chat History Overlay */
-        @media (max-width: 767px) { /* Tailwind 'md' breakpoint and below */
-          .chat-history-mobile-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
-            z-index: 50;
-            display: flex;
-            justify-content: flex-start; /* Slide in from left */
-            transition: transform 0.3s ease-out;
-            transform: translateX(-100%);
-          }
-          .chat-history-mobile-overlay.open {
-            transform: translateX(0);
-          }
-          .chat-history-mobile-sidebar {
-            width: 75%; /* Adjust width as needed for mobile */
-            max-width: 300px; /* Optional: limit max width */
-            background-color: #1a202c; /* Tailwind gray-900 */
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 1.5rem;
-            border-right: 1px solid #2d3748; /* Tailwind gray-800 */
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          }
-        }
-      `}</style>
-
-      {/* Sidebar */}
+      {/* Sidebar (Existing Left Sidebar) */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-gray-800 bg-gray-900 transition-transform md:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -808,7 +751,7 @@ function TradingDashboardContent() {
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
             href="#"
-            onClick={() => setActiveView("dashboard")}
+            onClick={() => { setActiveView("dashboard"); setSidebarOpen(false); }}
           >
             <Home className="h-5 w-5" />
             Dashboard
@@ -820,7 +763,7 @@ function TradingDashboardContent() {
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
             href="#"
-            onClick={() => setActiveView("chat")}
+            onClick={() => { setActiveView("chat"); setSidebarOpen(false); }}
           >
             <MessageCircle className="h-5 w-5" />
             Aura Chat
@@ -832,7 +775,7 @@ function TradingDashboardContent() {
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
             href="#"
-            onClick={() => setActiveView("analysis")}
+            onClick={() => { setActiveView("analysis"); setSidebarOpen(false); }}
           >
             <BarChart3 className="h-5 w-5" />
             Analysis
@@ -844,7 +787,7 @@ function TradingDashboardContent() {
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
             href="#"
-            onClick={() => setActiveView("trade-log")}
+            onClick={() => { setActiveView("trade-log"); setSidebarOpen(false); }}
           >
             <FileText className="h-5 w-5" />
             Journal
@@ -856,7 +799,7 @@ function TradingDashboardContent() {
                 : "text-gray-400 hover:bg-gray-800 hover:text-white"
             }`}
             href="#"
-            onClick={() => setActiveView("settings")}
+            onClick={() => { setActiveView("settings"); setSidebarOpen(false); }}
           >
             <Settings className="h-5 w-5" />
             Settings
@@ -864,7 +807,7 @@ function TradingDashboardContent() {
         </nav>
       </aside>
 
-      {/* Main content */}
+      {/* Main content area */}
       <div className="flex flex-1 flex-col md:pl-64">
         <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center justify-between border-b border-gray-800 bg-gray-900 px-6">
           <button className="md:hidden" onClick={() => setSidebarOpen(true)}>
@@ -989,71 +932,197 @@ function TradingDashboardContent() {
             )}
 
             {activeView === "chat" && (
-              <div className="flex flex-col md:flex-row min-h-[calc(100vh-160px)] bg-gray-800/50 rounded-lg shadow-xl overflow-hidden">
-                {/* Mobile Chat History Overlay (Hidden on md and larger screens) */}
-                <div
-                  className={`chat-history-mobile-overlay md:hidden ${isChatHistoryMobileOpen ? 'open' : ''}`}
-                  onClick={() => setIsChatHistoryMobileOpen(false)}
-                >
-                  <div
-                    className="chat-history-mobile-sidebar"
-                    onClick={(e) => e.stopPropagation()}
+              <div className="flex flex-col h-full bg-gray-900 rounded-lg shadow-xl overflow-hidden relative">
+                {/* Chat Header - Grok-like */}
+                <div className="flex items-center justify-between p-4 md:px-6 md:py-4 border-b border-gray-800 flex-shrink-0">
+                  {/* Left-aligned "X" for mobile history sidebar close */}
+                  <button
+                      className="md:hidden text-gray-400 hover:text-white"
+                      onClick={() => {
+                        // If currentChatSessionId, it means we are in a conversation
+                        // So 'X' acts as a back button to the empty state.
+                        // If not, then 'X' is just to close sidebar if it was open.
+                        if (currentChatSessionId) {
+                            setCurrentChatSessionId(null);
+                            setChatMessages([]);
+                        } else {
+                            // This might be redundant if the main X is used to toggle sidebar
+                            // but good for explicit state management.
+                        }
+                      }}
                   >
-                    <div className="flex justify-between items-center mb-6">
-                      <h3 className="text-xl font-extrabold text-indigo-400">Conversations</h3>
-                      <button onClick={() => setIsChatHistoryMobileOpen(false)} className="text-gray-400 hover:text-white">
-                        <X className="h-6 w-6" />
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-4 truncate">User ID: {isAuthReady && isFirebaseServicesReady ? (userId ? userId.substring(0, 8) + '...' : 'N/A') : 'Loading...'}</p>
+                      {currentChatSessionId ? <X className="h-6 w-6" /> : null}
+                  </button>
+
+                  {/* Center Title / Logo */}
+                  <div className="flex-1 text-center font-semibold text-lg text-gray-300">
+                    Aura Bot {currentChatSessionId ? `(${currentChatSessionId.substring(0, 8)}...)` : ''}
+                  </div>
+
+                  {/* Right-aligned buttons */}
+                  <div className="flex space-x-2">
+                    {/* New Chat Button */}
                     <button
                       onClick={handleNewConversation}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-105 mb-6"
+                      className="p-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center transition-all duration-200"
+                      title="New Chat"
                     >
-                      <Plus className="inline-block w-5 h-5 mr-2" /> New Conversation
+                      <SquarePen className="h-5 w-5" />
                     </button>
-
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-                      {chatSessions.length > 0 ? (
-                        chatSessions.map((session) => (
-                          <div
-                            key={session.id}
-                            onClick={() => handleSwitchConversation(session.id)}
-                            className={`p-3 rounded-lg cursor-pointer transition duration-150 ease-in-out
-                              ${session.id === currentChatSessionId ? 'bg-indigo-700 text-white shadow-lg' : 'bg-gray-700 text-gray-200 hover:bg-gray-600'}`
-                            }
-                          >
-                            <p className="font-semibold text-lg truncate">{session.name || 'Untitled Chat'}</p>
-                            <p className="text-sm text-gray-400 truncate mt-1">
-                              {session.lastMessageText || 'No messages yet...'}
-                            </p>
-                            {session.createdAt && typeof session.createdAt.toDate === 'function' && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {session.createdAt.toDate().toLocaleDateString()}
-                              </p>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-gray-500 text-md text-center mt-4">No conversations yet. Start a new one!</p>
-                      )}
-                    </div>
+                    {/* History Button (opens right overlay sidebar) */}
+                    <button
+                      onClick={() => setIsChatHistoryMobileOpen(true)}
+                      className="p-2 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center justify-center transition-all duration-200"
+                      title="View History"
+                    >
+                      <History className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
 
+                {/* Main Chat Content Area */}
+                {currentChatSessionId ? (
+                  // Active Conversation View
+                  <div className="flex-1 flex flex-col relative overflow-hidden">
+                    {/* Messages Container (scrollable) */}
+                    <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar" style={{ paddingBottom: '88px' }}> {/* Adjusted padding to clear input */}
+                      <div className="space-y-4">
+                        {chatMessages.map((msg) => (
+                          <div
+                            key={msg.id}
+                            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[80%] rounded-xl p-3 ${ // Grok uses rounded-xl bubbles
+                                msg.sender === "user"
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-gray-700 text-gray-200"
+                              } break-words`}
+                            >
+                              <p>{msg.text}</p>
+                              {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
+                                  <p className="text-xs text-gray-400 mt-1 text-right">
+                                      {msg.timestamp.toDate().toLocaleString()}
+                                  </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        <div ref={chatMessagesEndRef} />
+                      </div>
+                    </div>
 
-                {/* Desktop Chat History Sidebar (Hidden on small screens) */}
-                <div className="hidden md:flex w-1/4 bg-gray-800 p-6 border-r border-gray-700 flex-col custom-scrollbar flex-shrink-0">
-                  <h3 className="text-xl font-extrabold mb-6 text-indigo-400">Conversations</h3>
-                  <p className="text-xs text-gray-400 mb-4 truncate">User ID: {isAuthReady && isFirebaseServicesReady ? (userId ? userId.substring(0, 8) + '...' : 'N/A') : 'Loading...'}</p>
-                  <button
-                    onClick={handleNewConversation}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-105 mb-6"
-                  >
-                    <Plus className="inline-block w-5 h-5 mr-2" /> New Conversation
-                  </button>
+                    {/* Input area (fixed at bottom) */}
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-gray-900 border-t border-gray-800 z-10">
+                      <div className="relative flex items-center w-full bg-gray-800 rounded-lg border border-gray-700 pr-2">
+                        <input
+                          type="text"
+                          placeholder="Ask anything"
+                          className="flex-1 bg-transparent text-white rounded-lg px-4 py-3 focus:outline-none"
+                          value={messageInput}
+                          onChange={(e) => setMessageInput(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter" && !isSendingMessage) {
+                              handleSendMessage();
+                            }
+                          }}
+                          disabled={isSendingMessage}
+                        />
+                        <button
+                          className="p-2 text-white rounded-full bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all duration-200"
+                          onClick={handleSendMessage}
+                          disabled={isSendingMessage}
+                        >
+                          {isSendingMessage ? (
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Empty State (Grok-like initial screen)
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-4 pb-20"> {/* Added pb-20 for bottom spacing */}
+                    <Bot className="h-24 w-24 text-purple-400 mb-4 animate-bounce-slow" /> {/* Larger logo, subtle animation */}
+                    <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-8">Aura AI</h2>
+                    <p className="text-xl text-gray-400 mb-12">Your intelligent trading assistant.</p>
 
-                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+                    <div className="relative w-full max-w-xl mb-4">
+                      <div className="relative flex items-center w-full bg-gray-800 rounded-lg border border-gray-700 pr-2">
+                        <input
+                          type="text"
+                          placeholder="Ask anything"
+                          className="flex-1 bg-transparent text-white rounded-lg px-4 py-3 focus:outline-none"
+                          value={messageInput}
+                          onChange={(e) => setMessageInput(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter" && !isSendingMessage) {
+                              // If there's an input, initiate new conversation and send message
+                              if (messageInput.trim()) {
+                                handleNewConversation().then(() => {
+                                  // This promise resolution doesn't guarantee state update for currentChatSessionId
+                                  // before handleSendMessage is called. Better to let handleSendMessage check.
+                                  handleSendMessage();
+                                });
+                              }
+                            }
+                          }}
+                          disabled={isSendingMessage}
+                        />
+                        <button
+                          className="p-2 text-white rounded-full bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all duration-200"
+                          onClick={() => {
+                            // On click, if there's an input, start new convo and send
+                            if (messageInput.trim()) {
+                              handleNewConversation().then(() => {
+                                handleSendMessage();
+                              });
+                            }
+                          }}
+                          disabled={isSendingMessage}
+                        >
+                          {isSendingMessage ? (
+                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <Send className="h-5 w-5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Placeholder for "Create Images" / "Edit Image" buttons */}
+                    <div className="flex space-x-4 mt-4">
+                      <button className="bg-gray-700 text-gray-300 px-6 py-2 rounded-full hover:bg-gray-600 transition-colors">
+                        Create Images
+                      </button>
+                      <button className="bg-gray-700 text-gray-300 px-6 py-2 rounded-full hover:bg-gray-600 transition-colors">
+                        Edit Image
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Right Overlay Chat History Sidebar (Desktop & Mobile) */}
+                <div
+                  className={`fixed inset-y-0 right-0 z-50 w-full md:w-80 flex-col bg-gray-900 border-l border-gray-800 transition-transform ease-out duration-300 ${
+                    isChatHistoryMobileOpen ? "translate-x-0" : "translate-x-full"
+                  } flex`}
+                >
+                  <div className="flex items-center justify-between p-4 border-b border-gray-800 flex-shrink-0">
+                    <h3 className="text-xl font-extrabold text-indigo-400">History</h3>
+                    <button onClick={() => setIsChatHistoryMobileOpen(false)} className="text-gray-400 hover:text-white">
+                      <X className="h-6 w-6" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
                     {chatSessions.length > 0 ? (
                       chatSessions.map((session) => (
                         <div
@@ -1067,95 +1136,25 @@ function TradingDashboardContent() {
                           <p className="text-sm text-gray-400 truncate mt-1">
                             {session.lastMessageText || 'No messages yet...'}
                           </p>
-                            {session.createdAt && typeof session.createdAt.toDate === 'function' && (
-                                <p className="text-xs text-gray-500 mt-1">
-                                    {session.createdAt.toDate().toLocaleDateString()}
-                                </p>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-gray-500 text-md text-center mt-4">No conversations yet. Start a new one!</p>
-                      )}
-                    </div>
-                </div>
-
-                {/* Right Main Chat Area */}
-                <div className="flex-1 flex flex-col p-4 md:p-6 min-w-0">
-                  <h2 className="text-2xl font-bold mb-6 text-center text-indigo-400">Aura AI Chat</h2>
-                  <button
-                    className="md:hidden flex items-center justify-center mb-4 bg-gray-700 py-2 rounded-md text-gray-300 hover:bg-gray-600"
-                    onClick={() => setIsChatHistoryMobileOpen(true)}
-                  >
-                    <MessageCircle className="w-5 h-5 mr-2" /> View Conversations
-                  </button>
-
-                  {currentChatSessionId ? (
-                    <>
-                      <div className="flex-1 overflow-y-auto mb-4 border-b border-gray-700 pb-4 custom-scrollbar">
-                        <div className="space-y-4">
-                          {chatMessages.map((msg) => (
-                            <div
-                              key={msg.id}
-                              className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
-                            >
-                              <div
-                                className={`max-w-[80%] rounded-lg p-3 ${ // Keep max-width for bubbles
-                                  msg.sender === "user"
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-gray-700 text-gray-200"
-                                } break-words`} {/* ADDED break-words here */}
-                              >
-                                <p>{msg.text}</p> {/* Removed unnecessary p tag if break-words is on div */}
-                                {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
-                                    <p className="text-xs text-gray-400 mt-1 text-right">
-                                        {msg.timestamp.toDate().toLocaleString()}
-                                    </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                          <div ref={chatMessagesEndRef} />
-                        </div>
-                      </div>
-                      <div className="relative flex items-center w-full">
-                        <input
-                          type="text"
-                          placeholder="Ask Aura about the market, your trades, or anything else..."
-                          className="flex-1 bg-gray-700 border border-gray-600 text-white rounded-md px-4 py-2 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                          value={messageInput}
-                          onChange={(e) => setMessageInput(e.target.value)}
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter" && !isSendingMessage) {
-                              handleSendMessage();
-                            }
-                          }}
-                          disabled={isSendingMessage}
-                        />
-                        <button
-                          className="absolute right-2 p-2 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-                          onClick={handleSendMessage}
-                          disabled={isSendingMessage}
-                          style={{ backgroundColor: 'transparent' }}
-                        >
-                          {isSendingMessage ? (
-                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          ) : (
-                            <Send className="h-5 w-5 text-gray-400 hover:text-purple-400" />
+                          {session.createdAt && typeof session.createdAt.toDate === 'function' && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {session.createdAt.toDate().toLocaleDateString()}
+                            </p>
                           )}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500 text-center">
-                      <MessageCircle className="w-16 h-16 mb-4 text-gray-600" />
-                      <p className="text-xl font-semibold mb-2">Welcome to Aura Chat!</p>
-                      <p className="text-lg">Click "New Conversation" to start chatting with Aura.</p>
-                    </div>
-                  )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 text-md text-center mt-4">No conversations yet.</p>
+                    )}
+                  </div>
+                  <div className="p-4 border-t border-gray-800 flex-shrink-0">
+                    <button
+                      onClick={handleNewConversation}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 transition duration-200 ease-in-out transform hover:scale-105"
+                    >
+                      <Plus className="inline-block w-5 h-5 mr-2" /> Start New Chat
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1289,7 +1288,7 @@ function TradingDashboardContent() {
                         className="w-full inline-flex items-center justify-center px-5 py-3 rounded-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-50"
                       >
                         {isAnalyzing ? (
-                          <svg className="animate-spin h-5 w-5 text-white mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -1396,8 +1395,8 @@ function TradingDashboardContent() {
                               <span className="font-bold text-emerald-400">{analysisResults.ai_suggestion.recommended_action}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-gray-300">Position Size:</span>
-                              <span className="font-bold text-white">{analysisResults.ai_suggestion.position_size}</span>
+                                <span className="text-gray-300">Position Size:</span>
+                                <span className="font-bold text-white">{analysisResults.ai_suggestion.position_size}</span>
                             </div>
                           </div>
                         </div>
@@ -1673,8 +1672,6 @@ function TradingDashboardContent() {
 
             {activeView === "settings" && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Note: The Card components are imported from "@/components/ui/card" */}
-                {/* Ensure shadcn/ui is correctly initialized and card component added */}
                 <Card className="bg-gray-800/50 border-gray-700 p-6">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                     <CardTitle className="text-lg font-semibold text-gray-300">USER PROFILE</CardTitle>
@@ -1711,7 +1708,7 @@ function TradingDashboardContent() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-400">Real-time Notifications</label>
+                      <label className="text-sm font-medium mb-2 text-gray-400">Real-time Notifications</label>
                       <button
                         onClick={() => setNotificationsEnabled(!notificationsEnabled)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
@@ -1728,7 +1725,7 @@ function TradingDashboardContent() {
                     <p className="text-xs text-gray-500 -mt-2 mb-2">Get instant alerts for price movements</p>
 
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-gray-400">Voice Commands</label>
+                      <label className="text-sm font-medium mb-2 text-gray-400">Voice Commands</label>
                       <button
                         onClick={() => setVoiceCommandsEnabled(!voiceCommandsEnabled)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
