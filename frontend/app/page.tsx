@@ -1,8 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-// Import ALL necessary Lucide-React icons (added Card components, DollarSign, BarChart3, Settings, FileText for Analysis)
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card" // Added for Analysis Cards
+// Import ONLY necessary Lucide-React icons for the currently enabled views
 import {
   Home,
   MessageCircle,
@@ -13,19 +12,16 @@ import {
   Bot,
   User,
   Send,
-  ChevronDown, // Added for dropdowns in Analysis/Settings
   Plus,
-  Save, // Added for Analysis/Journal
-  Play, // Added for Run Analysis button
-  TrendingDown,
   History,
   SquarePen,
   Mic,
   Volume2,
-  DollarSign, // Added for Analysis/Dashboard
-  BarChart3,  // Added for Analysis/Dashboard
-  Settings,   // Added for Settings (next step, but included here for completeness of original imports)
-  FileText    // Added for Journal (next step, but included here for completeness of original imports)
+  TrendingDown,
+  DollarSign,
+  BarChart3,
+  Play,
+  Save // Save is used for Chat About Analysis which we've added
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -41,7 +37,7 @@ const appId = process.env.NEXT_PUBLIC_APP_ID || 'default-app-id';
 console.log("DIAG: Initial appId (from environment or fallback):", appId);
 
 
-// Define interfaces for the expected API response structure (reintroduced for Analysis)
+// Define interfaces for the expected API response structure
 interface AISuggestion {
   entry_type: string;
   recommended_action: string;
@@ -68,7 +64,7 @@ interface AnalysisResult {
   ormcr_reason: string;
 }
 
-// Market Data (for Dashboard and Analysis Live Price) (kept)
+// Market Data (for Dashboard and Analysis Live Price)
 interface MarketData {
   price: number | string;
   percent_change: number | string;
@@ -83,7 +79,7 @@ interface AllMarketPrices {
   [key: string]: MarketData;
 }
 
-// Interface for a chat session (kept)
+// Interface for a chat session
 interface ChatSession {
   id: string;
   name: string;
@@ -92,7 +88,7 @@ interface ChatSession {
   lastMessageTimestamp?: any;
 }
 
-// Custom Alert/Message component (kept)
+// Custom Alert/Message component
 const CustomAlert: React.FC<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
   const bgColor = {
     'success': 'bg-emerald-600',
@@ -120,7 +116,6 @@ const CustomAlert: React.FC<{ message: string; type: 'success' | 'error' | 'warn
 
 
 // !!! THIS IS THE MAIN EXPORT FOR YOUR PAGE !!!
-// It wraps the actual application logic (TradingDashboardContent) with the FirebaseProvider.
 export default function TradingDashboardWrapper() {
   return (
     <FirebaseProvider>
@@ -130,23 +125,22 @@ export default function TradingDashboardWrapper() {
 }
 
 
-// This component now contains the actual application logic and uses the useFirebase hook.
 function TradingDashboardContent() {
   const { db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule } = useFirebase();
 
   // --- STATE VARIABLES ---
-  const [activeView, setActiveView] = useState("dashboard") // Default to dashboard
-  const [sidebarOpen, setSidebarOpen] = useState(false) // Left sidebar toggle
+  const [activeView, setActiveView] = useState("dashboard")
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentAlert, setCurrentAlert] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
-  const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false); // Right overlay sidebar toggle
+  const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false);
 
-  // Market Data states (kept)
+  // Market Data states
   const [marketPrices, setMarketPrices] = useState<AllMarketPrices>({})
   const [loadingPrices, setLoadingPrices] = useState(true)
   const [errorPrices, setErrorPrices] = useState<string | null>(null)
   const [currentLivePrice, setCurrentLivePrice] = useState<string>('N/A');
 
-  // Chat states (kept)
+  // Chat states
   const [messageInput, setMessageInput] = useState("")
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
@@ -159,16 +153,14 @@ function TradingDashboardContent() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Simple hardcoded for now, will reintroduce settings loading later
   const [aiAssistantName] = useState("Aura");
 
-  // Alerts (dashboard) - Placeholder (kept)
   const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([
     { id: 1, message: 'BTC/USD - Strong Buy Signal', type: 'buy' },
     { id: 2, message: 'ETH/USD - Price Drop Alert', type: 'sell' },
   ]);
 
-  // Analysis Page Inputs and Results (reintroduced)
+  // Analysis Page Inputs and Results
   const [analysisCurrencyPair, setAnalysisCurrencyPair] = useState("BTC/USD")
   const [analysisTimeframes, setAnalysisTimeframes] = useState<string[]>([])
   const [analysisTradeType, setAnalysisTradeType] = useState("Scalp (Quick trades)")
@@ -181,7 +173,6 @@ function TradingDashboardContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
-  // Hardcoded for Analysis (reintroduced)
   const availableTimeframes = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
   const availableIndicators = [
     { name: "RSI", desc: "Relative Sth Index" },
@@ -197,7 +188,6 @@ function TradingDashboardContent() {
 
   // --- HANDLERS ---
 
-  // Handle creating a new conversation (kept)
   const handleNewConversation = useCallback(async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
@@ -235,7 +225,6 @@ function TradingDashboardContent() {
     }
   }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
 
-  // Handle switching active conversation (kept)
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
     setIsChatHistoryMobileOpen(false);
@@ -244,7 +233,7 @@ function TradingDashboardContent() {
     console.log("DIAG: Switched to conversation ID:", sessionId);
   };
 
-  // Helper function to fetch from backend (kept)
+
   const fetchBackendChatResponse = useCallback(async (requestBody: any) => {
     try {
       const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
@@ -268,7 +257,6 @@ function TradingDashboardContent() {
         await firestoreModule.addDoc(messagesCollectionRef, aiMessage);
         console.log("DIAG: AI response added to Firestore.");
 
-        // Update chat session again with AI's last message
         const sessionDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}`);
         await firestoreModule.setDoc(sessionDocRef, {
           lastMessageText: aiMessage.text,
@@ -293,7 +281,6 @@ function TradingDashboardContent() {
   }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]);
 
 
-  // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE (kept)
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
     if (!messageInput.trim() && !isVoice) return;
     if (!db || !userId || !currentChatSessionId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
@@ -306,7 +293,7 @@ function TradingDashboardContent() {
     const messageType = isVoice ? 'audio' : 'text';
 
     setIsSendingMessage(true);
-    setMessageInput(""); // Clear input immediately
+    setMessageInput("");
 
     try {
       const userMessage = { id: crypto.randomUUID(), sender: "user", text: messageContent, timestamp: firestoreModule.serverTimestamp(), type: messageType };
@@ -317,7 +304,6 @@ function TradingDashboardContent() {
       await firestoreModule.addDoc(messagesCollectionRef, userMessage);
       console.log("DIAG: User message added to Firestore.");
 
-      // Update the chat session's last message text and timestamp
       const sessionDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}`);
       await firestoreModule.setDoc(sessionDocRef, {
         lastMessageText: userMessage.text,
@@ -325,7 +311,6 @@ function TradingDashboardContent() {
         name: chatMessages.length === 0 ? userMessage.text.substring(0, 30) + (userMessage.text.length > 30 ? '&hellip;' : '') : (chatSessions.find((s: ChatSession) => s.id === currentChatSessionId)?.name || "Untitled Chat"),
       }, { merge: true });
 
-      // Prepare chat history to send to backend (all messages in the current session)
       const payloadHistory = chatMessages
         .filter(msg => msg.id !== 'initial-greeting')
         .map(msg => ({ role: msg.sender === "user" ? "user" : "model", text: msg.text }));
@@ -359,7 +344,6 @@ function TradingDashboardContent() {
     }
   }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]);
 
-  // Voice recording handlers (kept)
   const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
       console.error("MediaDevices not supported in this environment.");
@@ -399,8 +383,6 @@ function TradingDashboardContent() {
     }
   }, []);
 
-
-  // Handler for running ORMCR Analysis (reintroduced)
   const handleRunAnalysis = async () => {
     if (!analysisCurrencyPair || analysisTimeframes.length === 0 || !analysisBalance || !analysisLeverage) {
       setCurrentAlert({ message: "Please select a Currency Pair, at least one Timeframe, Available Balance, and Leverage.", type: "warning" });
@@ -425,7 +407,7 @@ function TradingDashboardContent() {
       const response = await fetch(`${BACKEND_BASE_URL}/run_ormcr_analysis`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...analysisInput, userId }), // Pass userId to backend
+        body: JSON.stringify({ ...analysisInput, userId }),
       });
 
       if (!response.ok) {
@@ -478,7 +460,6 @@ function TradingDashboardContent() {
 
   // --- USE EFFECTS ---
 
-  // Effect for fetching chat sessions (kept)
   useEffect(() => {
     console.log("DIAG: useEffect for chat sessions listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
@@ -520,7 +501,6 @@ function TradingDashboardContent() {
   }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]);
 
 
-  // Effect for fetching messages of the currently active chat session (kept)
   useEffect(() => {
     console.log("DIAG: useEffect for chat messages listener triggered. db ready:", !!db, "userId ready:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && currentChatSessionId && isFirebaseServicesReady && firestoreModule) {
@@ -553,7 +533,6 @@ function TradingDashboardContent() {
     }
   }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]);
 
-  // Auto-scroll chat to bottom (kept)
   useEffect(() => {
     if (chatMessagesEndRef.current) {
         chatMessagesEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -561,7 +540,6 @@ function TradingDashboardContent() {
   }, [chatMessages, activeView, isChatHistoryMobileOpen]);
 
 
-  // Fetch market prices for dashboard (kept)
   const fetchMarketPricesData = useCallback(async (initialLoad = false) => {
     console.log("DIAG: Fetching market prices from:", BACKEND_BASE_URL + "/all_market_prices");
     try {
@@ -587,7 +565,6 @@ function TradingDashboardContent() {
     }
   }, []);
 
-  // Effect for fetching market prices (kept)
   useEffect(() => {
     fetchMarketPricesData(true);
 
@@ -595,11 +572,9 @@ function TradingDashboardContent() {
     return () => clearInterval(intervalId);
   }, [fetchMarketPricesData]);
 
-  // Fetch live price for the selected currency pair on Analysis page (reintroduced)
   const fetchAnalysisLivePrice = useCallback(async (pair: string) => {
     console.log("DIAG: Fetching analysis live price for:", pair, "from:", BACKEND_BASE_URL + "/all_market_prices");
     try {
-      // Ensure the symbol matches what the backend expects (e.g., BTC/USD -> BTCUSDT)
       const backendSymbol = pair.replace('/', '') + 'T';
       const response = await fetch(`${BACKEND_BASE_URL}/all_market_prices`);
       if (!response.ok) {
@@ -620,7 +595,6 @@ function TradingDashboardContent() {
     }
   }, []);
 
-  // Effect for fetching analysis live price (reintroduced)
   useEffect(() => {
     if (activeView === 'analysis') {
       fetchAnalysisLivePrice(analysisCurrencyPair);
@@ -745,7 +719,7 @@ function TradingDashboardContent() {
                   </div>
                 )}
 
-                {/* Placeholder for Alerts and Market Selection in Dashboard (keeping structure for consistency) */}
+                {/* Placeholder for Alerts and Market Selection in Dashboard */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
                     <h3 className="text-xl font-semibold mb-4">Trading Performance (Placeholder)</h3>
@@ -765,7 +739,7 @@ function TradingDashboardContent() {
               </div>
             )}
 
-            {/* Chat View (kept) */}
+            {/* Chat View */}
             {activeView === "chat" && (
               <div className="flex flex-col md:flex-row h-full bg-gray-900 rounded-lg shadow-xl overflow-hidden relative">
                 {/* Chat Header - Grok-like */}
@@ -986,7 +960,7 @@ function TradingDashboardContent() {
               </div>
             )}
 
-            {/* Analysis View (reintroduced) */}
+            {/* Analysis View */}
             {activeView === "analysis" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-6">
@@ -1152,12 +1126,17 @@ function TradingDashboardContent() {
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">24h Change</div>
-                          {/* !!! CRITICAL FIX: Ensure type check before comparison !!! */}
-                          <div className={`text-lg font-bold ${typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number' && marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number'
-                              ? `${marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change.toFixed(2)}%`
-                              : 'N/A'}
-                          </div>
+                          {/* !!! CRITICAL FIX: Explicitly narrow type for comparison !!! */}
+                          {(() => {
+                              const percentChange = marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change;
+                              const isNumber = typeof percentChange === 'number';
+                              const textColor = isNumber && percentChange >= 0 ? 'text-emerald-400' : 'text-red-400';
+                              return (
+                                  <div className={`text-lg font-bold ${textColor}`}>
+                                      {isNumber ? `${percentChange.toFixed(2)}%` : 'N/A'}
+                                  </div>
+                              );
+                          })()}
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">Volume</div>
