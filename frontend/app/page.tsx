@@ -1,12 +1,13 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-// Import only essential Lucide-React icons for this minimal version + chat icons
+// Import all necessary Lucide-React icons (added TrendingUp/Down for dashboard)
 import {
   Home,
   MessageCircle,
   Menu,
   X,
+  TrendingUp,
   Bell,
   Bot,
   User,
@@ -15,7 +16,8 @@ import {
   History,
   SquarePen,
   Mic,
-  Volume2
+  Volume2,
+  TrendingDown // Added for dashboard market overview
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -31,7 +33,22 @@ const appId = process.env.NEXT_PUBLIC_APP_ID || 'default-app-id';
 console.log("DIAG: Initial appId (from environment or fallback):", appId);
 
 
-// Define interfaces for a chat session (needed for chat functionality)
+// Define interfaces for Market Data (reintroduced for dashboard)
+interface MarketData {
+  price: number | string;
+  percent_change: number | string;
+  rsi: number | string;
+  macd: number | string;
+  stoch_k: number | string;
+  volume: number | string;
+  orscr_signal: string;
+}
+
+interface AllMarketPrices {
+  [key: string]: MarketData;
+}
+
+// Interface for a chat session (from previous step, kept)
 interface ChatSession {
   id: string;
   name: string;
@@ -40,7 +57,7 @@ interface ChatSession {
   lastMessageTimestamp?: any;
 }
 
-// Custom Alert/Message component (to replace window.alert)
+// Custom Alert/Message component (kept)
 const CustomAlert: React.FC<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
   const bgColor = {
     'success': 'bg-emerald-600',
@@ -83,12 +100,19 @@ function TradingDashboardContent() {
   const { db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule } = useFirebase();
 
   // --- STATE VARIABLES ---
-  const [activeView, setActiveView] = useState("dashboard") // Default to dashboard for now
+  const [activeView, setActiveView] = useState("dashboard") // Default to dashboard
   const [sidebarOpen, setSidebarOpen] = useState(false) // Left sidebar toggle
   const [currentAlert, setCurrentAlert] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
   const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false); // Right overlay sidebar toggle
 
-  // Chat states (reintroduced)
+  // Market Data states (reintroduced)
+  const [marketPrices, setMarketPrices] = useState<AllMarketPrices>({})
+  const [loadingPrices, setLoadingPrices] = useState(true)
+  const [errorPrices, setErrorPrices] = useState<string | null>(null)
+  const [currentLivePrice, setCurrentLivePrice] = useState<string>('N/A'); // Used in Analysis, but kept for consistency with original
+
+
+  // Chat states (kept from previous step)
   const [messageInput, setMessageInput] = useState("")
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
@@ -104,10 +128,15 @@ function TradingDashboardContent() {
   // Simple hardcoded for now, will reintroduce settings loading later
   const [aiAssistantName] = useState("Aura");
 
+  // Alerts (dashboard) - Placeholder (reintroduced for dashboard)
+  const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([
+    { id: 1, message: 'BTC/USD - Strong Buy Signal', type: 'buy' },
+    { id: 2, message: 'ETH/USD - Price Drop Alert', type: 'sell' },
+  ]);
 
   // --- HANDLERS ---
 
-  // Handle creating a new conversation (reintroduced)
+  // Handle creating a new conversation (kept)
   const handleNewConversation = useCallback(async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
@@ -133,7 +162,7 @@ function TradingDashboardContent() {
       const initialGreeting = {
         id: crypto.randomUUID(),
         sender: 'ai',
-        text: `Hello! I&apos;m ${aiAssistantName}, your AI trading assistant. How can I help you today?`, // FIXED APOSTROPHE HERE
+        text: `Hello! I&apos;m ${aiAssistantName}, your AI trading assistant. How can I help you today?`,
         timestamp: firestoreModule.serverTimestamp()
       };
       await firestoreModule.addDoc(messagesCollectionRef, initialGreeting);
@@ -145,7 +174,7 @@ function TradingDashboardContent() {
     }
   }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
 
-  // Handle switching active conversation (reintroduced)
+  // Handle switching active conversation (kept)
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
     setIsChatHistoryMobileOpen(false);
@@ -154,8 +183,7 @@ function TradingDashboardContent() {
     console.log("DIAG: Switched to conversation ID:", sessionId);
   };
 
-
-  // Helper function to fetch from backend (reintroduced)
+  // Helper function to fetch from backend (kept)
   const fetchBackendChatResponse = useCallback(async (requestBody: any) => {
     try {
       const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
@@ -204,7 +232,7 @@ function TradingDashboardContent() {
   }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]);
 
 
-  // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE (reintroduced)
+  // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE (kept)
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
     if (!messageInput.trim() && !isVoice) return;
     if (!db || !userId || !currentChatSessionId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
@@ -270,7 +298,7 @@ function TradingDashboardContent() {
     }
   }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]);
 
-  // Voice recording handlers (reintroduced)
+  // Voice recording handlers (kept)
   const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
       console.error("MediaDevices not supported in this environment.");
@@ -312,7 +340,7 @@ function TradingDashboardContent() {
 
   // --- USE EFFECTS ---
 
-  // Effect for fetching chat sessions (reintroduced)
+  // Effect for fetching chat sessions (kept)
   useEffect(() => {
     console.log("DIAG: useEffect for chat sessions listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
@@ -354,7 +382,7 @@ function TradingDashboardContent() {
   }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]);
 
 
-  // Effect for fetching messages of the currently active chat session (reintroduced)
+  // Effect for fetching messages of the currently active chat session (kept)
   useEffect(() => {
     console.log("DIAG: useEffect for chat messages listener triggered. db ready:", !!db, "userId ready:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && currentChatSessionId && isFirebaseServicesReady && firestoreModule) {
@@ -387,12 +415,47 @@ function TradingDashboardContent() {
     }
   }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]);
 
-  // Auto-scroll chat to bottom (reintroduced)
+  // Auto-scroll chat to bottom (kept)
   useEffect(() => {
     if (chatMessagesEndRef.current) {
         chatMessagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [chatMessages, activeView, isChatHistoryMobileOpen]);
+
+
+  // Fetch market prices for dashboard (reintroduced)
+  const fetchMarketPricesData = useCallback(async (initialLoad = false) => {
+    console.log("DIAG: Fetching market prices from:", BACKEND_BASE_URL + "/all_market_prices");
+    try {
+      if (initialLoad) {
+        setLoadingPrices(true);
+      }
+      setErrorPrices(null);
+      const response = await fetch(`${BACKEND_BASE_URL}/all_market_prices`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! Status: ${response.status}. Response: ${errorText}`);
+      }
+      const data: AllMarketPrices = await response.json();
+      setMarketPrices(data);
+      console.log("DIAG: Market prices fetched successfully.", data);
+    } catch (error: any) {
+      console.error("DIAG: Error fetching market prices:", error);
+      setErrorPrices(error.message || "Failed to fetch market prices.");
+    } finally {
+      if (initialLoad) {
+        setLoadingPrices(false);
+      }
+    }
+  }, []);
+
+  // Effect for fetching market prices (reintroduced)
+  useEffect(() => {
+    fetchMarketPricesData(true); // Fetch immediately on component mount
+
+    const intervalId = setInterval(() => fetchMarketPricesData(false), 10000); // Then every 10 seconds
+    return () => clearInterval(intervalId); // Cleanup interval on unmount
+  }, [fetchMarketPricesData]);
 
 
   return (
@@ -437,7 +500,7 @@ function TradingDashboardContent() {
             <MessageCircle className="h-5 w-5" />
             Aura Chat
           </a>
-          {/* Other navigation links (Analysis, Trade Log, Settings) are removed for this test */}
+          {/* Other navigation links (Analysis, Trade Log, Settings) are still removed */}
         </nav>
       </aside>
 
@@ -459,15 +522,66 @@ function TradingDashboardContent() {
           <main className="flex-1 p-6">
             {currentAlert && <CustomAlert message={currentAlert.message} type={currentAlert.type} onClose={() => setCurrentAlert(null)} />}
 
-            {/* Dashboard View (from minimal version) */}
+            {/* Dashboard View (reintroduced Market Overview) */}
             {activeView === "dashboard" && (
               <div className="flex flex-col space-y-6">
-                <h2 className="text-2xl font-bold text-white mb-6">Market Overview (Dashboard)</h2>
-                <p className="text-gray-400">This is the dashboard view. The chat functionality is now integrated!</p>
+                <h2 className="text-2xl font-bold text-white mb-6">Market Overview</h2>
+                {loadingPrices && <p>Loading market prices...</p>}
+                {errorPrices && <p className="text-red-500">Error: {errorPrices}</p>}
+                {!loadingPrices && !errorPrices && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {Object.entries(marketPrices).map(([pair, data]) => (
+                      <div key={pair} className="bg-gray-800/50 rounded-lg p-4 shadow-lg border border-gray-700">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-semibold text-gray-300">{pair}</h3>
+                          {typeof data.percent_change === 'number' && data.percent_change >= 0 ? (
+                            <TrendingUp className="w-5 h-5 text-green-400" />
+                          ) : (
+                            <TrendingDown className="w-5 h-5 text-red-400" />
+                          )}
+                        </div>
+                        <div className="text-3xl font-bold text-white mb-1">
+                          ${typeof data.price === 'number' ? data.price.toFixed(2) : 'N/A'}
+                        </div>
+                        <div className={`text-sm ${typeof data.percent_change === 'number' && data.percent_change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {typeof data.percent_change === 'number' ? data.percent_change.toFixed(2) : 'N/A'}%
+                          <span className="text-gray-400 ml-1">Today</span>
+                        </div>
+                        <div className="text-xs text-gray-400 mt-2">
+                          RSI: {typeof data.rsi === 'number' ? data.rsi.toFixed(2) : "N/A"} | MACD: {typeof data.macd === 'number' ? data.macd.toFixed(2) : "N/A"}
+                        </div>
+                        <div className={`text-sm font-semibold mt-1 ${
+                            data.orscr_signal === "BUY" ? 'text-green-500' :
+                            data.orscr_signal === "SELL" ? 'text-red-500' : 'text-yellow-500'
+                        }`}>
+                            Signal: {data.orscr_signal || 'N/A'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Placeholder for Alerts and Market Selection in Dashboard */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+                    <h3 className="text-xl font-semibold mb-4">Trading Performance (Placeholder)</h3>
+                    <p className="text-gray-400">Content for trading performance will go here.</p>
+                  </div>
+
+                  <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+                    <h3 className="text-xl font-semibold mb-4">Recent Alerts (Placeholder)</h3>
+                    <p className="text-gray-400">Content for recent alerts will go here.</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+                  <h3 className="text-xl font-semibold mb-4">MARKET SELECTION (Placeholder)</h3>
+                  <p className="text-gray-400">Content for market selection will go here.</p>
+                </div>
               </div>
             )}
 
-            {/* Chat View (reintroduced completely) */}
+            {/* Chat View (kept from previous step) */}
             {activeView === "chat" && (
               <div className="flex flex-col md:flex-row h-full bg-gray-900 rounded-lg shadow-xl overflow-hidden relative">
                 {/* Chat Header - Grok-like */}
@@ -485,7 +599,7 @@ function TradingDashboardContent() {
                   </button>
 
                   <div className="flex-1 text-center font-semibold text-lg text-gray-300">
-                    Aura Bot {currentChatSessionId ? `(${userId ? userId.substring(0, 8) : 'N/A'}...)` : ''}
+                    Aura Bot {userId ? `(${userId.substring(0, 8)}...)` : ''}
                   </div>
 
                   <div className="flex space-x-2">
