@@ -28,6 +28,11 @@ import {
   Edit2
 } from "lucide-react"
 
+// Import React Markdown and rehype-raw
+import ReactMarkdown from 'react-markdown';
+import rehypeRaw from 'rehype-raw';
+
+
 // Import the new FirebaseProvider and useFirebase hook
 import { FirebaseProvider, useFirebase } from '@/components/FirebaseProvider';
 
@@ -257,7 +262,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]); // appId is a constant from env, not a dependency
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
@@ -282,7 +287,7 @@ function TradingDashboardContent() {
       }
 
       const data = await response.json();
-      const aiResponseText = data.response || "No response from AI.";
+      const aiResponseText = data.response || "No response from AI."; // AI response expected as plain text or markdown
       const aiMessage = { id: crypto.randomUUID(), sender: "ai", text: aiResponseText, timestamp: firestoreModule?.serverTimestamp() };
 
       console.log("DIAG: AI response received:", data);
@@ -312,7 +317,7 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Backend fetch finished.");
     }
-  }, [db, userId, currentChatSessionId, firestoreModule, setChatMessages]); // appId is a constant from env, not a dependency
+  }, [db, userId, currentChatSessionId, firestoreModule, setChatMessages]);
 
 
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
@@ -377,7 +382,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]); // appId is a constant from env, not a dependency
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]);
 
   const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
@@ -1017,7 +1022,29 @@ function TradingDashboardContent() {
                                   : "bg-gray-700 text-gray-200"
                               } break-words`}
                             >
-                              <p>{msg.text}</p>
+                              {/* Conditionally render with ReactMarkdown for AI messages */}
+                              {msg.sender === "ai" ? (
+                                <ReactMarkdown
+                                  rehypePlugins={[rehypeRaw]}
+                                  className="prose prose-invert prose-p:my-1 prose-li:my-1 prose-li:leading-tight prose-ul:my-1 text-sm leading-relaxed"
+                                  components={{
+                                    // Custom components for styling Markdown elements
+                                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                                    ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
+                                    ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
+                                    li: ({node, ...props}) => <li className="ml-4" {...props} />,
+                                    strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
+                                    em: ({node, ...props}) => <em className="italic" {...props} />,
+                                    h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                    h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-1" {...props} />,
+                                    h3: ({node, ...props}) => <h3 className="text-md font-semibold mt-2 mb-1" {...props} />,
+                                  }}
+                                >
+                                  {msg.text}
+                                </ReactMarkdown>
+                              ) : (
+                                <p>{msg.text}</p>
+                              )}
                               {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
                                   <p className="text-xs text-gray-400 mt-1 text-right">
                                       {msg.timestamp.toDate().toLocaleString()}
