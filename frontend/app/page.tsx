@@ -146,7 +146,7 @@ function TradingDashboardContent() {
   const [currentLivePrice, setCurrentLivePrice] = useState<string>('N/A');
 
   // Chat states
-  const [messageInput, setMessageInput] = useState("")
+  const [messageInput, setMessageInput] = useState("") // Correctly named: messageInput and its setter
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
   const [chatMessages, setChatMessages] = useState<
@@ -268,10 +268,58 @@ function TradingDashboardContent() {
   };
 
 
+  // Helper function to fetch from backend (extracted for reusability)
+  const fetchBackendChatResponse = useCallback(async (requestBody: any) => {
+    try {
+      const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({error: response.statusText}));
+        throw new Error(`Backend error! Status: ${response.status}. Message: ${errorData.error || "Unknown response"}`);
+      }
+
+      const data = await response.json();
+      const aiResponseText = data.response || "No response from AI.";
+      const aiMessage = { id: crypto.randomUUID(), sender: "ai", text: aiResponseText, timestamp: firestoreModule?.serverTimestamp() };
+
+      console.log("DIAG: AI response received:", data);
+      if (db && userId && currentChatSessionId && firestoreModule) {
+        const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
+        await firestoreModule.addDoc(messagesCollectionRef, aiMessage);
+        console.log("DIAG: AI response added to Firestore.");
+
+        // Update chat session again with AI's last message
+        const sessionDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}`);
+        await firestoreModule.setDoc(sessionDocRef, {
+          lastMessageText: aiMessage.text,
+          lastMessageTimestamp: aiMessage.timestamp,
+        }, { merge: true });
+      }
+
+    } catch (error: any) {
+      console.error("DIAG: Error communicating with backend:", error);
+      setCurrentAlert({ message: `Failed to get AI response. Check backend deployment and URL: ${error.message || "Unknown error"}`, type: "error" });
+      const errorMessage = { id: crypto.randomUUID(), sender: "ai", text: `Oops! I encountered an error getting a response from the backend: ${error.message || "Unknown error"}. Please check your backend's status and its URL configuration in Vercel. 😅`, timestamp: firestoreModule ? firestoreModule.serverTimestamp() : null };
+      if (db && userId && currentChatSessionId && firestoreModule) {
+        const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
+        await firestoreModule.addDoc(messagesCollectionRef, errorMessage);
+      } else {
+        setChatMessages((prevMessages) => [...prevMessages, errorMessage]);
+      }
+    } finally {
+      setIsSendingMessage(false);
+      console.log("DIAG: Backend fetch finished.");
+    }
+  }, [db, userId, currentChatSessionId, firestoreModule]); // Dependencies for fetchBackendChatResponse
+
+
   // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
     if (!messageInput.trim() && !isVoice) return;
-    // Crucial check: Ensure all Firebase dependencies are fully initialized before attempting operations
     if (!db || !userId || !currentChatSessionId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Chat not ready. Please wait a moment or start a new conversation.", type: "warning" });
       console.warn("DIAG: Attempted to send message, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
@@ -281,12 +329,12 @@ function TradingDashboardContent() {
     const messageContent = messageInput.trim();
     const messageType = isVoice ? 'audio' : 'text';
 
+    setIsSendingMessage(true);
+    setMessageInput(""); // Clear input immediately
+
     try {
       const userMessage = { id: crypto.randomUUID(), sender: "user", text: messageContent, timestamp: firestoreModule.serverTimestamp(), type: messageType };
       console.log("DIAG: User message prepared:", userMessage);
-
-      setIsSendingMessage(true);
-      setMessageInput(""); // Clear input immediately
 
       console.log("DIAG: Adding user message to Firestore for session:", currentChatSessionId);
       const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
@@ -298,53 +346,22 @@ function TradingDashboardContent() {
       await firestoreModule.setDoc(sessionDocRef, {
         lastMessageText: userMessage.text,
         lastMessageTimestamp: userMessage.timestamp,
-        // Optionally update name if it's the first message
         name: chatMessages.length === 0 ? userMessage.text.substring(0, 30) + (userMessage.text.length > 30 ? '...' : '') : (chatSessions.find((s: ChatSession) => s.id === currentChatSessionId)?.name || "Untitled Chat"),
       }, { merge: true });
 
       // Prepare chat history to send to backend (all messages in the current session)
-      // Make a copy to avoid mutating state directly, and filter out any temporary local greetings
       const payloadHistory = chatMessages
-        .filter(msg => msg.id !== 'initial-greeting')
+        .filter(msg => msg.id !== 'initial-greeting') // Filter out any temporary local greetings
         .map(msg => ({ role: msg.sender === "user" ? "user" : "model", text: msg.text }));
-
       payloadHistory.push({ role: 'user', text: userMessage.text }); // Add the current user message
 
-      console.log("DIAG: Sending payload to backend chat:", { message: userMessage.text, chatHistory: payloadHistory });
-
-      // Handle voice message logic
-      const fetchBackend = async (body: any) => {
-        const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({error: response.statusText}));
-          throw new Error(`Backend error! Status: ${response.status}. Message: ${errorData.error || "Unknown response"}`);
-        }
-
-        const data = await response.json();
-        const aiResponseText = data.response || "No response from AI.";
-        const aiMessage = { id: crypto.randomUUID(), sender: "ai", text: aiResponseText, timestamp: firestoreModule.serverTimestamp() };
-
-        console.log("DIAG: AI response received:", data);
-        await firestoreModule.addDoc(messagesCollectionRef, aiMessage);
-        console.log("DIAG: AI response added to Firestore.");
-
-        // Update chat session again with AI's last message
-        await firestoreModule.setDoc(sessionDocRef, {
-          lastMessageText: aiMessage.text,
-          lastMessageTimestamp: aiMessage.timestamp,
-        }, { merge: true });
-      };
 
       const requestBody: any = {
         session_id: currentChatSessionId,
         user_id: userId,
-        message: messageContent,
+        message: userMessage.text, // Use userMessage.text here, not messageContent which was cleared
         message_type: messageType,
+        chatHistory: payloadHistory // Include chat history for context
       };
 
       if (isVoice && audioBlob) {
@@ -353,32 +370,27 @@ function TradingDashboardContent() {
         reader.onloadend = async () => {
           const base64Audio = (reader.result as string).split(',')[1];
           requestBody.audio_data = base64Audio;
-          await fetchBackend(requestBody);
+          await fetchBackendChatResponse(requestBody);
         };
       } else {
-        await fetchBackend(requestBody);
+        await fetchBackendChatResponse(requestBody);
       }
-
 
     } catch (error: any) {
-      console.error("DIAG: Error sending message or getting AI response:", error);
-      setCurrentAlert({ message: `Failed to get AI response. Check backend deployment and URL: ${error.message || "Unknown error"}`, type: "error" });
-      const errorMessage = { id: crypto.randomUUID(), sender: "ai", text: `Oops! I encountered an error getting a response from the backend: ${error.message || "Unknown error"}. Please check your backend's status and its URL configuration in Vercel. 😅`, timestamp: firestoreModule ? firestoreModule.serverTimestamp() : null };
-      if (db && userId && currentChatSessionId && firestoreModule) {
-        await firestoreModule.addDoc(firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`), errorMessage);
-      } else {
-        setChatMessages((prevMessages) => [...prevMessages, errorMessage]);
-      }
-    } finally {
+      console.error("DIAG: Error in handleSendMessage (pre-backend-fetch):", error);
+      setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
-      console.log("DIAG: Message sending process finished.");
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions]);
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]);
 
 
-  const handleStartVoiceRecording = async () => {
+  const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
       console.error("MediaDevices not supported in this environment.");
+      return;
+    }
+    if (!currentChatSessionId) {
+      setCurrentAlert({ message: "Please start a new chat session before recording voice.", type: "warning" });
       return;
     }
     try {
@@ -390,7 +402,7 @@ function TradingDashboardContent() {
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         console.log("DIAG: Audio recording stopped, blob created:", audioBlob);
-        setChatInput("[Voice Message]"); // Indicate voice message
+        setMessageInput("[Voice Message]"); // Corrected: use setMessageInput
         await handleSendMessage(true, audioBlob);
         audioChunksRef.current = []; // Clear chunks for next recording
       };
@@ -401,15 +413,15 @@ function TradingDashboardContent() {
       console.error("DIAG: Error accessing microphone:", err);
       setCurrentAlert({ message: "Failed to start voice recording. Please check microphone permissions.", type: "error" });
     }
-  };
+  }, [currentChatSessionId, handleSendMessage, setMessageInput]); // Added setMessageInput as a dependency
 
-  const handleStopVoiceRecording = () => {
+  const handleStopVoiceRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
       setIsVoiceRecording(false);
       console.log("DIAG: Voice recording stopped.");
     }
-  };
+  }, []);
 
 
   // Handle saving settings
@@ -1087,7 +1099,7 @@ function TradingDashboardContent() {
                         />
                         <button
                           className="p-2 text-white rounded-full bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all duration-200"
-                          onClick={() => handleSendMessage()} // Explicitly call handleSendMessage without args
+                          onClick={() => handleSendMessage()}
                           disabled={isSendingMessage}
                         >
                           {isSendingMessage ? (
@@ -1129,7 +1141,6 @@ function TradingDashboardContent() {
                             if (e.key === "Enter" && !isSendingMessage) {
                               if (messageInput.trim()) {
                                 handleNewConversation().then(() => {
-                                  // Call handleSendMessage after new conversation is potentially created
                                   handleSendMessage();
                                 });
                               }

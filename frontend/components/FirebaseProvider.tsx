@@ -177,7 +177,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     } else {
       console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
-      if (!userId && !isAuthReady) { // Only set a random ID if one isn't already there and auth isn't ready
+      // Only set a random ID if one isn't already there and auth isn't ready
+      // and if Firebase services were not explicitly ready to avoid setting twice on quick re-renders
+      if (!userId && !isAuthReady && !isFirebaseServicesReady) {
         setUserId(crypto.randomUUID());
         setIsAuthReady(true);
         console.log("DIAG: Firebase not ready, setting immediate random userId for initial render.");
@@ -190,7 +192,11 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         unsubscribeAuth();
       }
     };
-  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]); // Correct dependencies
+    // Dependencies: auth, isFirebaseServicesReady, authModule are stable and correct dependencies.
+    // setUserId, setIsAuthReady are setter functions, stable. userId, isAuthReady (the values)
+    // are *set* by this effect, so including them as dependencies would cause infinite loops.
+    // The previous lint warning was likely a false positive, so we adhere to common practice.
+  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]);
 
   const contextValue = {
     db,

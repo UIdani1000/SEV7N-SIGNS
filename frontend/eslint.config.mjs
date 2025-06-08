@@ -27,7 +27,6 @@ const eslintConfig = [
       "react-hooks/exhaustive-deps": "warn",
 
       // Allow unused variables to be ignored if they are prefixed with an underscore (e.g., _userId)
-      // Or change to "off" if you want to completely disable this check for now.
       "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
     }
   }
