@@ -21,7 +21,7 @@ import {
   DollarSign,
   BarChart3,
   Play,
-  Save // Save is used for Chat About Analysis which we've added
+  Save
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -155,10 +155,9 @@ function TradingDashboardContent() {
 
   const [aiAssistantName] = useState("Aura");
 
-  const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([
-    { id: 1, message: 'BTC/USD - Strong Buy Signal', type: 'buy' },
-    { id: 2, message: 'ETH/USD - Price Drop Alert', type: 'sell' },
-  ]);
+  // Alerts (dashboard) - REMOVED, as it was unused and just a placeholder.
+  // const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([]);
+
 
   // Analysis Page Inputs and Results
   const [analysisCurrencyPair, setAnalysisCurrencyPair] = useState("BTC/USD")
@@ -524,7 +523,7 @@ function TradingDashboardContent() {
       });
 
       return () => {
-        console.log("DIAG: Cleaning up chat messages listener for session:", currentChatSessionId);
+        console.log("DIAG: Cleaning up chat messages listener.");
         unsubscribe();
       };
     } else {
@@ -719,7 +718,7 @@ function TradingDashboardContent() {
                   </div>
                 )}
 
-                {/* Placeholder for Alerts and Market Selection in Dashboard */}
+                {/* Dashboard Trading Performance & Market Selection placeholders */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
                     <h3 className="text-xl font-semibold mb-4">Trading Performance (Placeholder)</h3>
@@ -727,8 +726,8 @@ function TradingDashboardContent() {
                   </div>
 
                   <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-                    <h3 className="text-xl font-semibold mb-4">Recent Alerts (Placeholder)</h3>
-                    <p className="text-gray-400">Content for recent alerts will go here.</p>
+                    <h3 className="text-xl font-semibold mb-4">Recent Alerts (Removed Placeholder)</h3>
+                    <p className="text-gray-400">Alerts section removed to cleanup unused state/props.</p>
                   </div>
                 </div>
 
@@ -1126,7 +1125,6 @@ function TradingDashboardContent() {
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">24h Change</div>
-                          {/* !!! CRITICAL FIX: Explicitly narrow type for comparison !!! */}
                           {(() => {
                               const percentChange = marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change;
                               const isNumber = typeof percentChange === 'number';
@@ -1140,11 +1138,15 @@ function TradingDashboardContent() {
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">Volume</div>
-                          <div className="text-lg font-bold text-blue-400">
-                            {typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.volume === 'number'
-                              ? marketPrices[analysisCurrencyPair.replace('/', 'USDT')].volume.toFixed(2)
-                              : 'N/A'}
-                          </div>
+                          {(() => {
+                            const volume = marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.volume;
+                            const isVolumeNumber = typeof volume === 'number';
+                            return (
+                                <div className="text-lg font-bold text-blue-400">
+                                    {isVolumeNumber ? volume.toFixed(2) : 'N/A'}
+                                </div>
+                            );
+                          })()}
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">Signal</div>
