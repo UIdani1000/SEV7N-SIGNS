@@ -5,9 +5,8 @@ import React, {
   useEffect,
 } from 'react';
 
-// Dynamically import Firebase modules to avoid bundling them if not needed or
-// to allow them to be loaded on demand. This also helps with Next.js SSR.
-// These 'let' declarations remain because functions from dynamically imported modules need to be assigned to them.
+// Dynamically import Firebase modules
+// These 'let' declarations are necessary because functions from dynamically imported modules need to be assigned to them.
 let initializeApp: any;
 let getAuth: any;
 let signInAnonymously: any;
@@ -52,7 +51,6 @@ interface FirebaseContextType {
   } | null;
   authModule: {
     getAuth: typeof getAuth;
-    // Removed isAuthReady from authModule interface as it's a state, not a function to be exposed this way
     signInAnonymously: typeof signInAnonymously;
     signInWithCustomToken: typeof signInWithCustomToken;
     onAuthStateChanged: typeof onAuthStateChanged;
@@ -86,7 +84,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const firebaseFirestoreModule = await import("firebase/firestore");
 
           // Assign imported functions to our global variables
-          initializeApp = firebaseAppModule.initializeApp; // Correct assignment
+          initializeApp = firebaseAppModule.initializeApp;
           getAuth = firebaseAuthModule.getAuth;
           signInAnonymously = firebaseAuthModule.signInAnonymously;
           signInWithCustomToken = firebaseAuthModule.signInWithCustomToken;
@@ -118,7 +116,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
           };
 
-          const appInstance = initializeApp(firebaseConfig); // Use initializeApp here
+          const appInstance = initializeApp(firebaseConfig);
           const authInstance = getAuth(appInstance);
           const dbInstance = getFirestore(appInstance);
 
@@ -137,7 +135,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           console.log("DIAG: Firebase services loaded and initialized.");
         } catch (error) {
           console.error("DIAG: Error loading Firebase modules or initializing:", error);
-          // Set services ready to false to indicate failure
           setIsFirebaseServicesReady(false);
         }
       }
@@ -150,17 +147,16 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     let unsubscribeAuth: () => void;
 
+    // This effect should only run if auth and authModule are ready, and Firebase services are ready.
     if (auth && isFirebaseServicesReady && authModule) {
       console.log("DIAG: Setting up Firebase auth listener...");
-      unsubscribeAuth = authModule.onAuthStateChanged(auth, async (user: any) => { // Keeping 'any' for user for now.
+      unsubscribeAuth = authModule.onAuthStateChanged(auth, async (user: any) => {
         if (user) {
           setUserId(user.uid);
           setIsAuthReady(true);
           console.log("DIAG: User signed in:", user.uid);
         } else {
-          // If no user, try to sign in anonymously using the initial token if available
-          // Otherwise, sign in anonymously to ensure a userId for Firestore rules
-          const initialAuthToken = typeof (window as any).__initial_auth_token !== 'undefined' ? (window as any).__initial_auth_token : null; // Access __initial_auth_token from window
+          const initialAuthToken = typeof (window as any).__initial_auth_token !== 'undefined' ? (window as any).__initial_auth_token : null;
           try {
             if (initialAuthToken) {
               await authModule.signInWithCustomToken(auth, initialAuthToken);
@@ -171,9 +167,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
           } catch (error) {
             console.error("DIAG: Firebase anonymous sign-in failed:", error);
-            // Fallback: If anonymous sign-in fails, generate a random ID
             setUserId(crypto.randomUUID());
-            setIsAuthReady(true); // Still ready, just not authenticated by Firebase
+            setIsAuthReady(true);
             console.log("DIAG: Anonymous sign-in failed, using random userId.");
           }
         }
@@ -181,6 +176,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     } else {
       console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
       // Fallback for when Firebase services are not ready or auth module is not loaded
+      // This part ensures a userId is set even if Firebase fails to initialize or authenticate,
+      // allowing Firestore operations to attempt (though they might fail later if db/firestoreModule are null)
       if (!userId && !isAuthReady) {
         setUserId(crypto.randomUUID());
         setIsAuthReady(true);
@@ -188,14 +185,20 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
 
-    // Fixed: Added all necessary dependencies to the useEffect array, removed unnecessary ones.
     return () => {
       if (unsubscribeAuth) {
         console.log("DIAG: Cleaning up auth listener.");
         unsubscribeAuth();
       }
     };
-  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]); // Removed userId and isAuthReady from dep array as they are setState functions
+    // Dependencies: auth, isFirebaseServicesReady, authModule are direct dependencies for this effect.
+    // setUserId and setIsAuthReady are setter functions, stable across renders, so they don't need to be here.
+    // userId and isAuthReady (the state values) are updated by this effect and shouldn't be in the dep array
+    // if the effect's purpose is to *respond* to their initial undefined state or changes *from Firebase*.
+    // The previous error was a "missing dependency" warning, indicating the linter wanted userId/isAuthReady *values*.
+    // By keeping them out, and relying on `auth` and `isFirebaseServicesReady` for re-runs, we prevent infinite loops
+    // and correctly handle the auth state changes.
+  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]);
 
   const contextValue = {
     db,

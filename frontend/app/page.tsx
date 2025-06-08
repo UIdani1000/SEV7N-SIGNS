@@ -5,9 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 // Only import what's used
 import { DollarSign, BarChart3, Settings, FileText, Home, MessageCircle, Menu, X, TrendingUp, Bell, Bot, User, Send, ChevronDown, Plus, Save, Play, TrendingDown, History, SquarePen } from "lucide-react"
 
-// useRouter is not used, so we remove the import entirely
-// import { useRouter } from 'next/navigation';
-
 // Import the new FirebaseProvider and useFirebase hook
 import { FirebaseProvider, useFirebase } from '@/components/FirebaseProvider';
 
@@ -18,6 +15,7 @@ console.log("DIAG: Initial BACKEND_BASE_URL (from env or fallback):", BACKEND_BA
 // --- END: Backend URL ---
 
 // Global variables for Firebase configuration (only projectId for path construction)
+// appId is a constant and does not need to be in useEffect dependency arrays
 const appId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'default-app-id';
 console.log("DIAG: Initial appId (from env or fallback):", appId);
 
@@ -67,7 +65,7 @@ interface AllMarketPrices {
 interface ChatSession {
   id: string;
   name: string; // The display name for the chat session
-  createdAt: any; // Firebase Timestamp - Keeping 'any' as its Firebase specific type, which is complex to fully type here
+  createdAt: any; // Firebase Timestamp
   lastMessageText: string;
 }
 
@@ -111,10 +109,6 @@ export default function TradingDashboardWrapper() {
 
 // This component now contains the actual application logic and uses the useFirebase hook.
 function TradingDashboardContent() {
-  // Removed useRouter as it's not actually used anywhere in the component
-  // const router = useRouter();
-
-  // We get all Firebase related states and modules from our context
   const { db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule } = useFirebase();
 
   // --- STATE VARIABLES ---
@@ -135,7 +129,7 @@ function TradingDashboardContent() {
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
   const [chatMessages, setChatMessages] = useState<
-    { id: string; sender: string; text: string; timestamp?: any }[] // Keeping 'any' for timestamp here for Firebase flexibility
+    { id: string; sender: string; text: string; timestamp?: any }[]
   >([]);
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]); // List of chat sessions
@@ -159,7 +153,7 @@ function TradingDashboardContent() {
 
   // Journal/Trade Log states
   const [isViewingTradeLog, setIsViewingTradeLog] = useState(true)
-  const [tradeLogEntries, setTradeLogEntries] = useState<any[]>([]) // Keeping 'any' for trade log entries
+  const [tradeLogEntries, setTradeLogEntries] = useState<any[]>([])
 
   // Trade Entry Form states
   const [tradeDate, setTradeDate] = useState("")
@@ -203,6 +197,9 @@ function TradingDashboardContent() {
   // --- HANDLERS ---
 
   // Handle creating a new conversation
+  // Removed appId, chatMessages.length, chatSessions from useCallback dependencies as they are not
+  // direct dependencies that would cause `handleNewConversation` to re-create unnecessarily
+  // or they are global-like constants (appId)
   const handleNewConversation = useCallback(async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
@@ -234,11 +231,11 @@ function TradingDashboardContent() {
       await firestoreModule.addDoc(messagesCollectionRef, initialGreeting);
       console.log("DIAG: Initial greeting added to new chat session.");
 
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId, chatMessages.length, chatSessions]); // Added chatMessages.length, chatSessions for safe measure with name update logic
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
   // Handle switching active conversation
   const handleSwitchConversation = (sessionId: string) => {
@@ -283,7 +280,6 @@ function TradingDashboardContent() {
 
 
       // Prepare chat history to send to backend (all messages in the current session)
-      // Make a copy to avoid mutating state directly, and filter out any temporary local greetings
       const payloadHistory = chatMessages
         .filter(msg => msg.id !== 'initial-greeting')
         .map(msg => ({ role: msg.sender === "user" ? "user" : "model", text: msg.text }));
@@ -318,7 +314,7 @@ function TradingDashboardContent() {
       }, { merge: true });
 
 
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error sending message or getting AI response:", error);
       setCurrentAlert({ message: `Failed to get AI response. Check backend deployment and URL: ${error.message || "Unknown error"}`, type: "error" });
       const errorMessage = { id: crypto.randomUUID(), sender: "ai", text: `Oops! I encountered an error getting a response from the backend: ${error.message || "Unknown error"}. Please check your backend's status and its URL configuration in Vercel. 😅`, timestamp: firestoreModule ? firestoreModule.serverTimestamp() : null };
@@ -360,7 +356,7 @@ function TradingDashboardContent() {
       await firestoreModule.setDoc(settingsDocRef, settings, { merge: true });
       setCurrentAlert({ message: "Settings saved successfully!", type: "success" });
       console.log("DIAG: Settings saved successfully:", settings);
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error saving settings:", error);
       setCurrentAlert({ message: `Failed to save settings: ${error.message}`, type: "error" });
     }
@@ -419,7 +415,7 @@ function TradingDashboardContent() {
       setTradeNotes("");
       setIsViewingTradeLog(true);
 
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error logging trade:", error);
       setCurrentAlert({ message: `Failed to log trade: ${error.message || "Unknown error"}`, type: "error" });
     }
@@ -463,7 +459,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: "ORSCR Analysis completed!", type: "success" });
       console.log("DIAG: Analysis results received:", data);
 
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error running ORMCR analysis:", error);
       setAnalysisError(error.message || "Failed to run analysis.");
       setCurrentAlert({ message: `Analysis failed: ${error.message || "Unknown error"}. Check backend deployment.`, type: "error" });
@@ -522,7 +518,6 @@ function TradingDashboardContent() {
           } else {
             setCurrentChatSessionId(null); // No sessions, so no current chat
             console.log("DIAG: No chat sessions found, setting currentChatSessionId to null.");
-            // We won't automatically create a new chat here; the user will click "New Chat" from the empty state
           }
         }
       }, (error: any) => {
@@ -537,7 +532,9 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]);
+    // Removed appId from dependencies here. appId is a constant initialized outside, so it won't change
+    // and cause unnecessary re-runs of this effect.
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
 
 
   // Effect for fetching messages of the currently active chat session
@@ -564,7 +561,8 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]);
+    // Removed appId from dependencies here.
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
 
 
   // Fetch initial trade logs and set up real-time listener
@@ -588,7 +586,8 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
+    // Removed appId from dependencies here.
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
   // Load settings from Firestore
   useEffect(() => {
@@ -615,14 +614,17 @@ function TradingDashboardContent() {
           } else {
             console.log("DIAG: No settings document found, using defaults.");
           }
-        } catch (error: any) { // Keeping 'any' for generic error type for now
+        } catch (error: any) {
           console.error("DIAG: Error loading settings:", error);
           setCurrentAlert({ message: `Failed to load settings: ${error.message || 'Unknown error'}`, type: "error" });
         }
       };
       loadSettings();
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId, setDefaultTimeframe]); // Added setDefaultTimeframe to dependencies
+    // Removed appId and setDefaultTimeframe from dependencies here.
+    // setDefaultTimeframe is a setter function, so it's stable and doesn't need to be a dependency.
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -648,7 +650,7 @@ function TradingDashboardContent() {
       const data: AllMarketPrices = await response.json();
       setMarketPrices(data);
       console.log("DIAG: Market prices fetched successfully.", data);
-    } catch (error: any) { // Keeping 'any' for generic error type for now
+    } catch (error: any) {
       console.error("DIAG: Error fetching market prices:", error);
       setErrorPrices(error.message || "Failed to fetch market prices.");
     } finally {
@@ -684,7 +686,7 @@ function TradingDashboardContent() {
         setCurrentLivePrice('N/A');
         console.warn("DIAG: Analysis live price not found for", backendSymbol, data);
       }
-    } catch (e: any) { // Keeping 'any' for generic error type for now
+    } catch (e: any) {
       console.error("DIAG: Error fetching live price for analysis page:", e);
       setCurrentLivePrice('Error');
     }
