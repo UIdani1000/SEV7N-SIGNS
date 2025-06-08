@@ -1427,11 +1427,13 @@ function TradingDashboardContent() {
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">24h Change</div>
+                          {/* FIX START: Added explicit type check for percent_change */}
                           <div className={`text-lg font-bold ${typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number' && marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                             {typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number'
                               ? `${marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change.toFixed(2)}%`
                               : 'N/A'}
                           </div>
+                          {/* FIX END */}
                         </div>
                         <div className="text-center p-3 bg-gray-700/30 rounded-lg">
                           <div className="text-sm text-gray-400">Volume</div>
