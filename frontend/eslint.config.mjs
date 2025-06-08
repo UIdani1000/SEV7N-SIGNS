@@ -28,11 +28,7 @@ const eslintConfig = [
 
       // Allow unused variables to be ignored if they are prefixed with an underscore (e.g., _userId)
       // Or change to "off" if you want to completely disable this check for now.
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
-
-      // If 'router' is truly never used and still causes an error, you can explicitly ignore it like this
-      // Or simply remove its import if it's not used in page.tsx as I did in my last update for page.tsx
-      // "no-unused-vars": ["warn", { "varsIgnorePattern": "router" }]
+      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
     }
   }
 ];

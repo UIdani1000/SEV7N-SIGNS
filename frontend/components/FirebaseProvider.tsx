@@ -25,6 +25,7 @@ let query: any;
 let where: any;
 let getDocs: any;
 let serverTimestamp: any;
+let orderBy: any; // Explicitly declare orderBy here
 
 
 // Define the shape of the Firebase context
@@ -48,6 +49,7 @@ interface FirebaseContextType {
     where: typeof where;
     getDocs: typeof getDocs;
     serverTimestamp: typeof serverTimestamp;
+    orderBy: typeof orderBy; // Expose orderBy here
   } | null;
   authModule: {
     getAuth: typeof getAuth;
@@ -103,6 +105,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           where = firebaseFirestoreModule.where;
           getDocs = firebaseFirestoreModule.getDocs;
           serverTimestamp = firebaseFirestoreModule.serverTimestamp;
+          orderBy = firebaseFirestoreModule.orderBy; // Assign orderBy here
 
 
           // Construct Firebase config from environment variables
@@ -125,7 +128,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setDb(dbInstance);
 
           setFirestoreModule({
-            collection, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp
+            collection, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp, orderBy
           });
           setAuthModule({
             getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
@@ -147,7 +150,6 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     let unsubscribeAuth: () => void;
 
-    // This effect should only run if auth and authModule are ready, and Firebase services are ready.
     if (auth && isFirebaseServicesReady && authModule) {
       console.log("DIAG: Setting up Firebase auth listener...");
       unsubscribeAuth = authModule.onAuthStateChanged(auth, async (user: any) => {
@@ -167,7 +169,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
           } catch (error) {
             console.error("DIAG: Firebase anonymous sign-in failed:", error);
-            setUserId(crypto.randomUUID());
+            setUserId(crypto.randomUUID()); // Fallback to random ID if anonymous sign-in fails
             setIsAuthReady(true);
             console.log("DIAG: Anonymous sign-in failed, using random userId.");
           }
@@ -175,10 +177,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     } else {
       console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
-      // Fallback for when Firebase services are not ready or auth module is not loaded
-      // This part ensures a userId is set even if Firebase fails to initialize or authenticate,
-      // allowing Firestore operations to attempt (though they might fail later if db/firestoreModule are null)
-      if (!userId && !isAuthReady) {
+      if (!userId && !isAuthReady) { // Only set a random ID if one isn't already there and auth isn't ready
         setUserId(crypto.randomUUID());
         setIsAuthReady(true);
         console.log("DIAG: Firebase not ready, setting immediate random userId for initial render.");
@@ -191,14 +190,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         unsubscribeAuth();
       }
     };
-    // Dependencies: auth, isFirebaseServicesReady, authModule are direct dependencies for this effect.
-    // setUserId and setIsAuthReady are setter functions, stable across renders, so they don't need to be here.
-    // userId and isAuthReady (the state values) are updated by this effect and shouldn't be in the dep array
-    // if the effect's purpose is to *respond* to their initial undefined state or changes *from Firebase*.
-    // The previous error was a "missing dependency" warning, indicating the linter wanted userId/isAuthReady *values*.
-    // By keeping them out, and relying on `auth` and `isFirebaseServicesReady` for re-runs, we prevent infinite loops
-    // and correctly handle the auth state changes.
-  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]);
+  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]); // Correct dependencies
 
   const contextValue = {
     db,

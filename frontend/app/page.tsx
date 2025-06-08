@@ -2,11 +2,33 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-// Only import what's used
-import { DollarSign, BarChart3, Settings, FileText, Home, MessageCircle, Menu, X, TrendingUp, Bell, Bot, User, Send, ChevronDown, Plus, Save, Play, TrendingDown, History, SquarePen } from "lucide-react"
+import { DollarSign, BarChart3, Settings, FileText } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
 import { FirebaseProvider, useFirebase } from '@/components/FirebaseProvider';
+
+// Import all necessary Lucide-React icons
+import {
+  Home,
+  MessageCircle,
+  Menu,
+  X,
+  TrendingUp,
+  Bell,
+  Bot,
+  User,
+  Send,
+  ChevronDown,
+  Plus,
+  Save,
+  Play,
+  TrendingDown,
+  History,
+  SquarePen,
+  Mic,
+  Volume2
+} from "lucide-react"
+
 
 // --- START: Backend URL ---
 // Ensure NEXT_PUBLIC_BACKEND_BASE_URL is set in your .env.local file
@@ -15,7 +37,6 @@ console.log("DIAG: Initial BACKEND_BASE_URL (from env or fallback):", BACKEND_BA
 // --- END: Backend URL ---
 
 // Global variables for Firebase configuration (only projectId for path construction)
-// appId is a constant and does not need to be in useEffect dependency arrays
 const appId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'default-app-id';
 console.log("DIAG: Initial appId (from env or fallback):", appId);
 
@@ -65,7 +86,7 @@ interface AllMarketPrices {
 interface ChatSession {
   id: string;
   name: string; // The display name for the chat session
-  createdAt: any; // Firebase Timestamp
+  createdAt: any; // Firebase Timestamp - Keeping 'any' as its Firebase specific type, which is complex to fully type here
   lastMessageText: string;
 }
 
@@ -134,6 +155,9 @@ function TradingDashboardContent() {
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]); // List of chat sessions
   const [currentChatSessionId, setCurrentChatSessionId] = useState<string | null>(null); // Active chat session
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
 
   // Alerts (dashboard) - Placeholder
@@ -197,9 +221,6 @@ function TradingDashboardContent() {
   // --- HANDLERS ---
 
   // Handle creating a new conversation
-  // Removed appId, chatMessages.length, chatSessions from useCallback dependencies as they are not
-  // direct dependencies that would cause `handleNewConversation` to re-create unnecessarily
-  // or they are global-like constants (appId)
   const handleNewConversation = useCallback(async () => {
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
@@ -248,22 +269,25 @@ function TradingDashboardContent() {
 
 
   // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
+    if (!messageInput.trim() && !isVoice) return;
     // Crucial check: Ensure all Firebase dependencies are fully initialized before attempting operations
     if (!db || !userId || !currentChatSessionId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
       setCurrentAlert({ message: "Chat not ready. Please wait a moment or start a new conversation.", type: "warning" });
       console.warn("DIAG: Attempted to send message, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
-    if (!messageInput.trim()) return;
 
-    const userMessage = { id: crypto.randomUUID(), sender: "user", text: messageInput.trim(), timestamp: firestoreModule.serverTimestamp() };
-    console.log("DIAG: User message prepared:", userMessage);
-
-    setIsSendingMessage(true);
-    setMessageInput(""); // Clear input immediately
+    const messageContent = messageInput.trim();
+    const messageType = isVoice ? 'audio' : 'text';
 
     try {
+      const userMessage = { id: crypto.randomUUID(), sender: "user", text: messageContent, timestamp: firestoreModule.serverTimestamp(), type: messageType };
+      console.log("DIAG: User message prepared:", userMessage);
+
+      setIsSendingMessage(true);
+      setMessageInput(""); // Clear input immediately
+
       console.log("DIAG: Adding user message to Firestore for session:", currentChatSessionId);
       const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
       await firestoreModule.addDoc(messagesCollectionRef, userMessage);
@@ -278,8 +302,8 @@ function TradingDashboardContent() {
         name: chatMessages.length === 0 ? userMessage.text.substring(0, 30) + (userMessage.text.length > 30 ? '...' : '') : (chatSessions.find((s: ChatSession) => s.id === currentChatSessionId)?.name || "Untitled Chat"),
       }, { merge: true });
 
-
       // Prepare chat history to send to backend (all messages in the current session)
+      // Make a copy to avoid mutating state directly, and filter out any temporary local greetings
       const payloadHistory = chatMessages
         .filter(msg => msg.id !== 'initial-greeting')
         .map(msg => ({ role: msg.sender === "user" ? "user" : "model", text: msg.text }));
@@ -288,30 +312,52 @@ function TradingDashboardContent() {
 
       console.log("DIAG: Sending payload to backend chat:", { message: userMessage.text, chatHistory: payloadHistory });
 
-      const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage.text, chatHistory: payloadHistory }),
-      });
+      // Handle voice message logic
+      const fetchBackend = async (body: any) => {
+        const response = await fetch(`${BACKEND_BASE_URL}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({error: response.statusText}));
-        throw new Error(`Backend error! Status: ${response.status}. Message: ${errorData.error || "Unknown response"}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({error: response.statusText}));
+          throw new Error(`Backend error! Status: ${response.status}. Message: ${errorData.error || "Unknown response"}`);
+        }
+
+        const data = await response.json();
+        const aiResponseText = data.response || "No response from AI.";
+        const aiMessage = { id: crypto.randomUUID(), sender: "ai", text: aiResponseText, timestamp: firestoreModule.serverTimestamp() };
+
+        console.log("DIAG: AI response received:", data);
+        await firestoreModule.addDoc(messagesCollectionRef, aiMessage);
+        console.log("DIAG: AI response added to Firestore.");
+
+        // Update chat session again with AI's last message
+        await firestoreModule.setDoc(sessionDocRef, {
+          lastMessageText: aiMessage.text,
+          lastMessageTimestamp: aiMessage.timestamp,
+        }, { merge: true });
+      };
+
+      const requestBody: any = {
+        session_id: currentChatSessionId,
+        user_id: userId,
+        message: messageContent,
+        message_type: messageType,
+      };
+
+      if (isVoice && audioBlob) {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64Audio = (reader.result as string).split(',')[1];
+          requestBody.audio_data = base64Audio;
+          await fetchBackend(requestBody);
+        };
+      } else {
+        await fetchBackend(requestBody);
       }
-
-      const data = await response.json();
-      const aiResponseText = data.response || "No response from AI.";
-      const aiMessage = { id: crypto.randomUUID(), sender: "ai", text: aiResponseText, timestamp: firestoreModule.serverTimestamp() };
-
-      console.log("DIAG: AI response received:", data);
-      await firestoreModule.addDoc(messagesCollectionRef, aiMessage);
-      console.log("DIAG: AI response added to Firestore.");
-
-      // Update chat session again with AI's last message
-      await firestoreModule.setDoc(sessionDocRef, {
-        lastMessageText: aiMessage.text,
-        lastMessageTimestamp: aiMessage.timestamp,
-      }, { merge: true });
 
 
     } catch (error: any) {
@@ -327,7 +373,44 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Message sending process finished.");
     }
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions]);
+
+
+  const handleStartVoiceRecording = async () => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices) {
+      console.error("MediaDevices not supported in this environment.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      mediaRecorderRef.current.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        console.log("DIAG: Audio recording stopped, blob created:", audioBlob);
+        setChatInput("[Voice Message]"); // Indicate voice message
+        await handleSendMessage(true, audioBlob);
+        audioChunksRef.current = []; // Clear chunks for next recording
+      };
+      mediaRecorderRef.current.start();
+      setIsVoiceRecording(true);
+      console.log("DIAG: Voice recording started.");
+    } catch (err) {
+      console.error("DIAG: Error accessing microphone:", err);
+      setCurrentAlert({ message: "Failed to start voice recording. Please check microphone permissions.", type: "error" });
+    }
   };
+
+  const handleStopVoiceRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsVoiceRecording(false);
+      console.log("DIAG: Voice recording stopped.");
+    }
+  };
+
 
   // Handle saving settings
   const handleSaveSettings = async () => {
@@ -504,6 +587,8 @@ function TradingDashboardContent() {
     console.log("DIAG: useEffect for chat sessions listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
       const sessionsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions`);
+
+      // Using firestoreModule.orderBy directly now that it's exposed
       const q = firestoreModule.query(sessionsCollectionRef, firestoreModule.orderBy('createdAt', 'desc'));
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
@@ -532,8 +617,6 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-    // Removed appId from dependencies here. appId is a constant initialized outside, so it won't change
-    // and cause unnecessary re-runs of this effect.
   }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
 
 
@@ -542,7 +625,9 @@ function TradingDashboardContent() {
     console.log("DIAG: useEffect for chat messages listener triggered. db ready:", !!db, "userId ready:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && currentChatSessionId && isFirebaseServicesReady && firestoreModule) {
       const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
-      const q = firestoreModule.query(messagesCollectionRef, firestoreModule.orderBy('timestamp'));
+
+      // Using firestoreModule.orderBy directly
+      const q = firestoreModule.query(messagesCollectionRef, firestoreModule.orderBy('timestamp', 'asc'));
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
         console.log("DIAG: onSnapshot for chat messages received data for session:", currentChatSessionId);
@@ -561,7 +646,6 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-    // Removed appId from dependencies here.
   }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
 
 
@@ -570,6 +654,8 @@ function TradingDashboardContent() {
     console.log("DIAG: useEffect for trade logs listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
       const tradeLogsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/tradeLogs`);
+
+      // Using firestoreModule.orderBy directly
       const q = firestoreModule.query(tradeLogsCollectionRef, firestoreModule.orderBy('timestamp', 'desc'));
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
@@ -586,7 +672,6 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     }
-    // Removed appId from dependencies here.
   }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
   // Load settings from Firestore
@@ -621,8 +706,6 @@ function TradingDashboardContent() {
       };
       loadSettings();
     }
-    // Removed appId and setDefaultTimeframe from dependencies here.
-    // setDefaultTimeframe is a setter function, so it's stable and doesn't need to be a dependency.
   }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
 
@@ -967,7 +1050,7 @@ function TradingDashboardContent() {
                             className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
                           >
                             <div
-                              className={`max-w-[80%] rounded-xl p-3 ${ // Grok uses rounded-xl bubbles
+                              className={`max-w-[80%] p-3 rounded-xl ${ // Grok uses rounded-xl bubbles
                                 msg.sender === "user"
                                   ? "bg-purple-600 text-white"
                                   : "bg-gray-700 text-gray-200"
@@ -1004,7 +1087,7 @@ function TradingDashboardContent() {
                         />
                         <button
                           className="p-2 text-white rounded-full bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all duration-200"
-                          onClick={handleSendMessage}
+                          onClick={() => handleSendMessage()} // Explicitly call handleSendMessage without args
                           disabled={isSendingMessage}
                         >
                           {isSendingMessage ? (
@@ -1015,6 +1098,14 @@ function TradingDashboardContent() {
                           ) : (
                             <Send className="h-5 w-5" />
                           )}
+                        </button>
+                        <button
+                          onClick={isVoiceRecording ? handleStopVoiceRecording : handleStartVoiceRecording}
+                          className={`ml-2 p-2 rounded-full focus:outline-none focus:ring-2 focus:ring-purple-500 ${isVoiceRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                          title={isVoiceRecording ? "Stop Recording" : "Start Voice Recording"}
+                          disabled={!currentChatSessionId}
+                        >
+                          {isVoiceRecording ? <Volume2 className="h-5 w-5 text-white animate-pulse" /> : <Mic className="h-5 w-5 text-white" />}
                         </button>
                       </div>
                     </div>
@@ -1036,11 +1127,9 @@ function TradingDashboardContent() {
                           onChange={(e) => setMessageInput(e.target.value)}
                           onKeyPress={(e) => {
                             if (e.key === "Enter" && !isSendingMessage) {
-                              // If there's an input, initiate new conversation and send message
                               if (messageInput.trim()) {
                                 handleNewConversation().then(() => {
-                                  // This promise resolution doesn't guarantee state update for currentChatSessionId
-                                  // before handleSendMessage is called. Better to let handleSendMessage check.
+                                  // Call handleSendMessage after new conversation is potentially created
                                   handleSendMessage();
                                 });
                               }
@@ -1051,7 +1140,6 @@ function TradingDashboardContent() {
                         <button
                           className="p-2 text-white rounded-full bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 transition-all duration-200"
                           onClick={() => {
-                            // On click, if there's an input, start new convo and send
                             if (messageInput.trim()) {
                               handleNewConversation().then(() => {
                                 handleSendMessage();
@@ -1433,7 +1521,7 @@ function TradingDashboardContent() {
                             <svg className="animate-spin h-5 w-5 text-purple-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
+                            </svg>
                             <p className="mt-2 text-indigo-400">Analyzing...</p>
                           </div>
                         )}
@@ -1645,7 +1733,7 @@ function TradingDashboardContent() {
             )}
 
             {activeView === "settings" && (
-              <div className="grid grid-cols-1 lg:col-span-2 gap-6"> {/* Changed to lg:col-span-2 for better layout */}
+              <div className="grid grid-cols-1 lg:col-span-2 gap-6">
                 <Card className="bg-gray-800/50 border-gray-700 p-6">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                     <CardTitle className="text-lg font-semibold text-gray-300">USER PROFILE</CardTitle>
