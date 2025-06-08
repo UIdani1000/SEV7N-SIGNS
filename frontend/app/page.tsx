@@ -36,10 +36,10 @@ const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://127
 console.log("DIAG: Initial BACKEND_BASE_URL (from env or fallback):", BACKEND_BASE_URL);
 // --- END: Backend URL ---
 
-// Global variables for Firebase configuration (using __app_id as mandated)
-// This __app_id is provided by the Canvas environment.
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-console.log("DIAG: Initial appId (from __app_id or fallback):", appId);
+// Global variables for Firebase configuration (using process.env for Vercel deployment)
+// This environment variable MUST be set on Vercel.
+const appId = process.env.NEXT_PUBLIC_APP_ID || 'default-app-id';
+console.log("DIAG: Initial appId (from environment or fallback):", appId);
 
 
 // Define interfaces for the expected API response structure
@@ -190,7 +190,7 @@ function TradingDashboardContent() {
   const [exitPrice, setExitPrice] = useState("")
   const [quantity, setQuantity] = useState("")
   const [profitLoss, setProfitLoss] = useState("")
-  const [strategyUsed, setStrategyUsed] = useState("ORSCr Strategy")
+  const [strategyUsed, setStrategyUsed = useState("ORSCr Strategy")
   const [tradeNotes, setTradeNotes] = useState("")
 
 
@@ -258,7 +258,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]); // Added appId to dependencies
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]); // appId is a stable dependency here
 
   // Handle switching active conversation
   const handleSwitchConversation = (sessionId: string) => {
@@ -316,7 +316,7 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Backend fetch finished.");
     }
-  }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]); // Added appId, setChatMessages to dependencies
+  }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]);
 
 
   // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE
@@ -383,7 +383,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]); // Added appId to dependencies
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]);
 
 
   const handleStartVoiceRecording = useCallback(async () => {
@@ -415,7 +415,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error accessing microphone:", err);
       setCurrentAlert({ message: "Failed to start voice recording. Please check microphone permissions.", type: "error" });
     }
-  }, [currentChatSessionId, handleSendMessage, setMessageInput]); // Added setMessageInput as a dependency
+  }, [currentChatSessionId, handleSendMessage, setMessageInput]);
 
   const handleStopVoiceRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {

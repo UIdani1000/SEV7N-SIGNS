@@ -115,7 +115,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
             storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
             messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-            appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+            appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID, // Use NEXT_PUBLIC_FIREBASE_APP_ID here as well
             measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
           };
 
@@ -180,7 +180,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
       // If Firebase services aren't ready, and no userId is set, provide a temporary one to avoid crashes
       // and allow components to proceed with rendering, even if not fully authenticated yet.
-      if (!userId && !isAuthReady && !isFirebaseServicesReady) {
+      // This part ensures a userId is always present for Firestore paths even if auth isn't fully set up.
+      if (!userId && !isAuthReady && !isFirebaseServicesReady) { // Check if not already set or ready
         setUserId(crypto.randomUUID());
         setIsAuthReady(true);
         console.log("DIAG: Firebase not ready, setting immediate random userId for initial render.");
@@ -193,9 +194,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         unsubscribeAuth();
       }
     };
-    // Corrected Dependencies: Removed setUserId and setIsAuthReady as they are stable setters.
+    // **Corrected Dependencies:** Removed setUserId and setIsAuthReady because they are stable setters.
     // The effect only depends on the *values* of auth, isFirebaseServicesReady, and authModule.
-  }, [auth, isFirebaseServicesReady, authModule]);
+  }, [auth, isFirebaseServicesReady, authModule, userId, isAuthReady]); // Kept userId, isAuthReady for conditional logic within the effect itself.
 
   const contextValue = {
     db,
