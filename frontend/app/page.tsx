@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-// Import ONLY necessary Lucide-React icons for the currently enabled views
+// Import ALL necessary Lucide-React icons (added Card components, DollarSign, BarChart3, Settings, FileText for Analysis)
 import {
   Home,
   MessageCircle,
@@ -21,7 +21,11 @@ import {
   DollarSign,
   BarChart3,
   Play,
-  Save
+  Save,
+  FileText, // Re-added for Trade Log / Journal
+  Settings, // Re-added for Settings (next step)
+  Trash2, // For deleting trade logs
+  Edit2 // For editing trade logs
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -88,6 +92,24 @@ interface ChatSession {
   lastMessageTimestamp?: any;
 }
 
+// Interfaces for Trade Log (reintroduced)
+interface TradeLogEntry {
+  id: string;
+  currencyPair: string;
+  entryPrice: number;
+  exitPrice: number;
+  volume: number;
+  profitOrLoss: number;
+  timestamp: any;
+  journalEntry?: string;
+}
+
+interface JournalEntry {
+  tradeId: string;
+  date: string;
+  content: string;
+}
+
 // Custom Alert/Message component
 const CustomAlert: React.FC<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
   const bgColor = {
@@ -150,14 +172,10 @@ function TradingDashboardContent() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentChatSessionId, setCurrentChatSessionId] = useState<string | null>(null);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>([]);
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [aiAssistantName] = useState("Aura");
-
-  // Alerts (dashboard) - REMOVED, as it was unused and just a placeholder.
-  // const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([]);
-
 
   // Analysis Page Inputs and Results
   const [analysisCurrencyPair, setAnalysisCurrencyPair] = useState("BTC/USD")
@@ -183,6 +201,22 @@ function TradingDashboardContent() {
     { name: "ATR", desc: "Average True Range" },
     { name: "Fibonacci Retracements", desc: "Key structural levels" },
   ]
+
+  // Trade Log states (reintroduced)
+  const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>([])
+  const [loadingTradeLogs, setLoadingTradeLogs] = useState(true)
+  const [tradeLogForm, setTradeLogForm] = useState({
+    currencyPair: "BTC/USD",
+    entryPrice: "",
+    exitPrice: "",
+    volume: "",
+    profitOrLoss: "",
+  })
+  const [isAddingTrade, setIsAddingTrade] = useState(false)
+  const [journalEntry, setJournalEntry] = useState("")
+  const [selectedTradeForJournal, setSelectedTradeForJournal] = useState<string | null>(null)
+  const [isSavingJournal, setIsSavingJournal] = useState(false)
+  const [tradeLogError, setTradeLogError] = useState<string | null>(null);
 
 
   // --- HANDLERS ---
@@ -354,6 +388,7 @@ function TradingDashboardContent() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Ensure mediaRecorderRef.current is assigned a new MediaRecorder instance
       mediaRecorderRef.current = new MediaRecorder(stream);
       mediaRecorderRef.current.ondataavailable = (event) => {
         audioChunksRef.current.push(event.data);
@@ -453,6 +488,117 @@ function TradingDashboardContent() {
       setActiveView("chat");
     } else {
       setCurrentAlert({ message: "No analysis results to chat about.", type: "warning" });
+    }
+  };
+
+  // Trade Log Handlers (reintroduced)
+  const handleAddTradeLog = async () => {
+    if (!tradeLogForm.currencyPair || !tradeLogForm.entryPrice || !tradeLogForm.exitPrice || !tradeLogForm.volume) {
+      setCurrentAlert({ message: "Please fill in all trade log fields.", type: "warning" });
+      return;
+    }
+    if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
+      setCurrentAlert({ message: "Firebase not ready. Cannot add trade log.", type: "warning" });
+      console.warn("DIAG: Attempted to add trade log, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+      return;
+    }
+
+    setIsAddingTrade(true);
+    setTradeLogError(null);
+
+    try {
+      const entryPriceNum = parseFloat(tradeLogForm.entryPrice);
+      const exitPriceNum = parseFloat(tradeLogForm.exitPrice);
+      const volumeNum = parseFloat(tradeLogForm.volume);
+
+      if (isNaN(entryPriceNum) || isNaN(exitPriceNum) || isNaN(volumeNum)) {
+          throw new Error("Invalid number format for price or volume.");
+      }
+
+      const profitOrLoss = (exitPriceNum - entryPriceNum) * volumeNum;
+
+      const tradeLogEntry = {
+        currencyPair: tradeLogForm.currencyPair,
+        entryPrice: entryPriceNum,
+        exitPrice: exitPriceNum,
+        volume: volumeNum,
+        profitOrLoss: parseFloat(profitOrLoss.toFixed(2)),
+        timestamp: firestoreModule.serverTimestamp(),
+      };
+
+      const tradeLogsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/tradeLogs`);
+      await firestoreModule.addDoc(tradeLogsCollectionRef, tradeLogEntry);
+
+      setCurrentAlert({ message: "Trade log added successfully!", type: "success" });
+      setTradeLogForm({
+        currencyPair: "BTC/USD",
+        entryPrice: "",
+        exitPrice: "",
+        volume: "",
+        profitOrLoss: "",
+      });
+      console.log("DIAG: Trade log added:", tradeLogEntry);
+    } catch (error: any) {
+      console.error("DIAG: Error adding trade log:", error);
+      setTradeLogError(error.message || "Failed to add trade log.");
+      setCurrentAlert({ message: `Failed to add trade log: ${error.message}`, type: "error" });
+    } finally {
+      setIsAddingTrade(false);
+    }
+  };
+
+  const handleSaveJournalEntry = async () => {
+    if (!selectedTradeForJournal || !journalEntry.trim()) {
+      setCurrentAlert({ message: "Please select a trade and write a journal entry.", type: "warning" });
+      return;
+    }
+    if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
+      setCurrentAlert({ message: "Firebase not ready. Cannot save journal entry.", type: "warning" });
+      console.warn("DIAG: Attempted to save journal, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+      return;
+    }
+
+    setIsSavingJournal(true);
+    setTradeLogError(null);
+
+    try {
+      const tradeDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/tradeLogs`, selectedTradeForJournal);
+      await firestoreModule.updateDoc(tradeDocRef, {
+        journalEntry: journalEntry,
+      });
+
+      setCurrentAlert({ message: "Journal entry saved successfully!", type: "success" });
+      setJournalEntry("");
+      setSelectedTradeForJournal(null);
+      console.log("DIAG: Journal entry saved for trade:", selectedTradeForJournal);
+    } catch (error: any) {
+      console.error("DIAG: Error saving journal entry:", error);
+      setTradeLogError(error.message || "Failed to save journal entry.");
+      setCurrentAlert({ message: `Failed to save journal entry: ${error.message}`, type: "error" });
+    } finally {
+      setIsSavingJournal(false);
+    }
+  };
+
+  const handleDeleteTradeLog = async (tradeId: string) => {
+    if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
+      setCurrentAlert({ message: "Firebase not ready. Cannot delete trade log.", type: "warning" });
+      console.warn("DIAG: Attempted to delete trade log, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+      return;
+    }
+
+    setTradeLogError(null); // Clear any previous error
+    if (window.confirm("Are you sure you want to delete this trade log?")) { // Using window.confirm temporarily, will replace with custom modal
+      try {
+        const tradeDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/tradeLogs`, tradeId);
+        await firestoreModule.deleteDoc(tradeDocRef);
+        setCurrentAlert({ message: "Trade log deleted successfully!", type: "success" });
+        console.log("DIAG: Trade log deleted:", tradeId);
+      } catch (error: any) {
+        console.error("DIAG: Error deleting trade log:", error);
+        setTradeLogError(error.message || "Failed to delete trade log.");
+        setCurrentAlert({ message: `Failed to delete trade log: ${error.message}`, type: "error" });
+      }
     }
   };
 
@@ -603,6 +749,47 @@ function TradingDashboardContent() {
   }, [activeView, analysisCurrencyPair, fetchAnalysisLivePrice]);
 
 
+  // Effect for fetching Trade Logs (reintroduced)
+  useEffect(() => {
+    console.log("DIAG: useEffect for trade logs listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+    if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
+      setLoadingTradeLogs(true);
+      const tradeLogsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/tradeLogs`);
+      const q = firestoreModule.query(tradeLogsCollectionRef, firestoreModule.orderBy('timestamp', 'desc'));
+
+      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
+        console.log("DIAG: onSnapshot for trade logs received data.");
+        const logs = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          currencyPair: doc.data().currencyPair,
+          entryPrice: doc.data().entryPrice,
+          exitPrice: doc.data().exitPrice,
+          volume: doc.data().volume,
+          profitOrLoss: doc.data().profitOrLoss,
+          timestamp: doc.data().timestamp,
+          journalEntry: doc.data().journalEntry || '',
+        })) as TradeLogEntry[];
+        setTradeLogs(logs);
+        setLoadingTradeLogs(false);
+      }, (error: any) => {
+        console.error("DIAG: Error fetching trade logs:", error);
+        setTradeLogError(error.message || "Failed to load trade logs.");
+        setCurrentAlert({ message: `Failed to load trade logs: ${error.message || 'Unknown error'}`, type: "error" });
+        setLoadingTradeLogs(false);
+      });
+
+      return () => {
+        console.log("DIAG: Cleaning up trade logs listener.");
+        unsubscribe();
+      };
+    } else {
+      setTradeLogs([]);
+      setLoadingTradeLogs(false);
+      console.log("DIAG: Trade logs listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
+    }
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
+
+
   return (
     <div className="flex h-screen bg-gray-900 text-white">
       {/* Sidebar */}
@@ -657,7 +844,30 @@ function TradingDashboardContent() {
             <BarChart3 className="h-5 w-5" />
             Analysis
           </a>
-          {/* Other navigation links (Trade Log, Settings) are still removed */}
+          <a
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              activeView === "trade-log"
+                ? "bg-gray-800 text-purple-400"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+            href="#"
+            onClick={() => { setActiveView("trade-log"); setSidebarOpen(false); }}
+          >
+            <FileText className="h-5 w-5" />
+            Trade Log
+          </a>
+          <a
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              activeView === "settings"
+                ? "bg-gray-800 text-purple-400"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+            href="#"
+            onClick={() => { setActiveView("settings"); setSidebarOpen(false); }}
+          >
+            <Settings className="h-5 w-5" />
+            Settings
+          </a>
         </nav>
       </aside>
 
@@ -726,8 +936,8 @@ function TradingDashboardContent() {
                   </div>
 
                   <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-                    <h3 className="text-xl font-semibold mb-4">Recent Alerts (Removed Placeholder)</h3>
-                    <p className="text-gray-400">Alerts section removed to cleanup unused state/props.</p>
+                    <h3 className="text-xl font-semibold mb-4">Recent Alerts (Placeholder)</h3>
+                    <p className="text-gray-400">Content for recent alerts will go here.</p>
                   </div>
                 </div>
 
@@ -1282,7 +1492,198 @@ function TradingDashboardContent() {
                 </div>
               </div>
             )}
-            {/* Other views (Trade Log, Settings) will be added back here */}
+
+            {/* Trade Log View (reintroduced) */}
+            {activeView === "trade-log" && (
+              <div className="flex flex-col space-y-6">
+                <h2 className="text-2xl font-bold text-white mb-6">Trade Log & Journal</h2>
+
+                {/* Add New Trade Form */}
+                <div className="bg-gray-800/40 rounded-xl shadow-lg border border-purple-500/30 p-6">
+                  <h3 className="text-lg font-semibold text-purple-300 mb-4">Add New Trade</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Currency Pair</label>
+                      <select
+                        className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                        value={tradeLogForm.currencyPair}
+                        onChange={(e) => setTradeLogForm({ ...tradeLogForm, currencyPair: e.target.value })}
+                      >
+                        <option>BTC/USD</option>
+                        <option>ETH/USD</option>
+                        <option>ADA/USD</option>
+                        <option>SOL/USD</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Entry Price</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                        placeholder="e.g., 29500.00"
+                        value={tradeLogForm.entryPrice}
+                        onChange={(e) => setTradeLogForm({ ...tradeLogForm, entryPrice: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Exit Price</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                        placeholder="e.g., 29750.00"
+                        value={tradeLogForm.exitPrice}
+                        onChange={(e) => setTradeLogForm({ ...tradeLogForm, exitPrice: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Volume (Units)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                        placeholder="e.g., 0.1"
+                        value={tradeLogForm.volume}
+                        onChange={(e) => setTradeLogForm({ ...tradeLogForm, volume: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleAddTradeLog}
+                    disabled={isAddingTrade}
+                    className="mt-6 w-full inline-flex items-center justify-center px-5 py-3 rounded-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-50"
+                  >
+                    {isAddingTrade ? (
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <Plus className="w-4 h-4 mr-2" />
+                    )}
+                    {isAddingTrade ? "Adding Trade..." : "Add Trade"}
+                  </button>
+                  {tradeLogError && <p className="text-red-500 text-sm mt-2">{tradeLogError}</p>}
+                </div>
+
+                {/* Trade Log Table */}
+                <div className="bg-gray-800/40 rounded-xl shadow-lg border border-cyan-500/30 p-6">
+                  <h3 className="text-lg font-semibold text-cyan-300 mb-4">Your Trades</h3>
+                  {loadingTradeLogs && <p className="text-gray-400">Loading trade history...</p>}
+                  {!loadingTradeLogs && tradeLogs.length === 0 && (
+                    <p className="text-gray-400">No trades logged yet. Add your first trade above!</p>
+                  )}
+                  {!loadingTradeLogs && tradeLogs.length > 0 && (
+                    <div className="overflow-x-auto custom-scrollbar">
+                      <table className="min-w-full divide-y divide-gray-700">
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Date</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Pair</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Entry</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Exit</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Volume</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">P/L</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Journal</th>
+                            <th className="px-4 py-2 text-left text-sm font-medium text-gray-300">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {tradeLogs.map((trade) => (
+                            <tr key={trade.id} className="hover:bg-gray-700/50 transition-colors">
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
+                                {trade.timestamp && typeof trade.timestamp.toDate === 'function' ? trade.timestamp.toDate().toLocaleDateString() : 'N/A'}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-white">{trade.currencyPair}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-white">{trade.entryPrice.toFixed(2)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-white">{trade.exitPrice.toFixed(2)}</td>
+                              <td className="px-4 py-3 whitespace-nowrap text-sm text-white">{trade.volume.toFixed(2)}</td>
+                              <td className={`px-4 py-3 whitespace-nowrap text-sm font-semibold ${trade.profitOrLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {trade.profitOrLoss.toFixed(2)}
+                              </td>
+                              <td className="px-4 py-3 text-sm text-gray-400 max-w-xs truncate cursor-pointer"
+                                  title={trade.journalEntry || "No journal entry. Click to add/edit."}
+                                  onClick={() => {
+                                    setSelectedTradeForJournal(trade.id);
+                                    setJournalEntry(trade.journalEntry || '');
+                                  }}>
+                                {trade.journalEntry ? trade.journalEntry : "Add Entry"}
+                              </td>
+                              <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => {
+                                    setSelectedTradeForJournal(trade.id);
+                                    setJournalEntry(trade.journalEntry || '');
+                                  }}
+                                  className="text-indigo-400 hover:text-indigo-500 mr-3"
+                                  title="Edit Journal"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTradeLog(trade.id)}
+                                  className="text-red-400 hover:text-red-500"
+                                  title="Delete Trade"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Journal Entry Editor */}
+                {selectedTradeForJournal && (
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-emerald-500/30 p-6">
+                    <h3 className="text-lg font-semibold text-emerald-300 mb-4">Journal Entry for Trade ID: {selectedTradeForJournal.substring(0, 8)}...</h3>
+                    <textarea
+                      className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md p-4 h-32 resize-y focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      placeholder="Write your thoughts, strategies, and lessons learned from this trade..."
+                      value={journalEntry}
+                      onChange={(e) => setJournalEntry(e.target.value)}
+                    ></textarea>
+                    <div className="flex justify-end space-x-3 mt-4">
+                      <button
+                        onClick={() => {
+                          setJournalEntry("");
+                          setSelectedTradeForJournal(null);
+                        }}
+                        className="px-4 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveJournalEntry}
+                        disabled={isSavingJournal}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                      >
+                        {isSavingJournal ? "Saving..." : "Save Journal Entry"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Settings View (placeholder for now) */}
+            {activeView === "settings" && (
+              <div className="flex flex-col space-y-6">
+                <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
+                <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+                  <h3 className="text-xl font-semibold mb-4">API Configuration (Placeholder)</h3>
+                  <p className="text-gray-400">Settings for API keys, backend URL, etc. will go here.</p>
+                </div>
+                <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
+                  <h3 className="text-xl font-semibold mb-4">User Preferences (Placeholder)</h3>
+                  <p className="text-gray-400">Theme, notifications, and other user preferences will go here.</p>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </div>
