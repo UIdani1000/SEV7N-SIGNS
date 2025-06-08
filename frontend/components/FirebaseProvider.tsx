@@ -169,7 +169,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
           } catch (error) {
             console.error("DIAG: Firebase anonymous sign-in failed:", error);
-            setUserId(crypto.randomUUID()); // Fallback to random ID if anonymous sign-in fails
+            // Fallback to random ID if anonymous sign-in fails, but still mark ready
+            setUserId(crypto.randomUUID());
             setIsAuthReady(true);
             console.log("DIAG: Anonymous sign-in failed, using random userId.");
           }
@@ -177,8 +178,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     } else {
       console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
-      // Only set a random ID if one isn't already there and auth isn't ready
-      // and if Firebase services were not explicitly ready to avoid setting twice on quick re-renders
+      // If Firebase services aren't ready, and no userId is set, provide a temporary one to avoid crashes
+      // and allow components to proceed with rendering, even if not fully authenticated yet.
       if (!userId && !isAuthReady && !isFirebaseServicesReady) {
         setUserId(crypto.randomUUID());
         setIsAuthReady(true);
@@ -192,11 +193,9 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         unsubscribeAuth();
       }
     };
-    // Dependencies: auth, isFirebaseServicesReady, authModule are stable and correct dependencies.
-    // setUserId, setIsAuthReady are setter functions, stable. userId, isAuthReady (the values)
-    // are *set* by this effect, so including them as dependencies would cause infinite loops.
-    // The previous lint warning was likely a false positive, so we adhere to common practice.
-  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]);
+    // Corrected Dependencies: Removed setUserId and setIsAuthReady as they are stable setters.
+    // The effect only depends on the *values* of auth, isFirebaseServicesReady, and authModule.
+  }, [auth, isFirebaseServicesReady, authModule]);
 
   const contextValue = {
     db,

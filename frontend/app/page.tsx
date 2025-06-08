@@ -36,9 +36,10 @@ const BACKEND_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://127
 console.log("DIAG: Initial BACKEND_BASE_URL (from env or fallback):", BACKEND_BASE_URL);
 // --- END: Backend URL ---
 
-// Global variables for Firebase configuration (only projectId for path construction)
-const appId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'default-app-id';
-console.log("DIAG: Initial appId (from env or fallback):", appId);
+// Global variables for Firebase configuration (using __app_id as mandated)
+// This __app_id is provided by the Canvas environment.
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+console.log("DIAG: Initial appId (from __app_id or fallback):", appId);
 
 
 // Define interfaces for the expected API response structure
@@ -88,6 +89,7 @@ interface ChatSession {
   name: string; // The display name for the chat session
   createdAt: any; // Firebase Timestamp - Keeping 'any' as its Firebase specific type, which is complex to fully type here
   lastMessageText: string;
+  lastMessageTimestamp?: any; // Optional for new sessions
 }
 
 // Custom Alert/Message component (to replace window.alert)
@@ -256,7 +258,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]); // Added appId to dependencies
 
   // Handle switching active conversation
   const handleSwitchConversation = (sessionId: string) => {
@@ -314,7 +316,7 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Backend fetch finished.");
     }
-  }, [db, userId, currentChatSessionId, firestoreModule]); // Dependencies for fetchBackendChatResponse
+  }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]); // Added appId, setChatMessages to dependencies
 
 
   // Handle sending chat message - NOW PERSISTENT WITH FIRESTORE
@@ -381,7 +383,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]);
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]); // Added appId to dependencies
 
 
   const handleStartVoiceRecording = useCallback(async () => {
@@ -605,7 +607,14 @@ function TradingDashboardContent() {
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
         console.log("DIAG: onSnapshot for chat sessions received data.");
-        const sessions = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as ChatSession }));
+        // Explicitly map properties to avoid 'id' duplication error
+        const sessions = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.data().name || "Untitled Chat",
+          createdAt: doc.data().createdAt,
+          lastMessageText: doc.data().lastMessageText || "No messages yet.",
+          lastMessageTimestamp: doc.data().lastMessageTimestamp || null
+        })) as ChatSession[]; // Assert the array type
         setChatSessions(sessions);
 
         if (!currentChatSessionId || !sessions.some((s: ChatSession) => s.id === currentChatSessionId)) {
@@ -629,7 +638,7 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]);
 
 
   // Effect for fetching messages of the currently active chat session
@@ -643,7 +652,15 @@ function TradingDashboardContent() {
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
         console.log("DIAG: onSnapshot for chat messages received data for session:", currentChatSessionId);
-        const messages = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as any }));
+        // Explicitly map properties for messages as well
+        const messages = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          sender: doc.data().sender,
+          text: doc.data().text,
+          timestamp: doc.data().timestamp,
+          type: doc.data().type || 'text', // Default to text type
+          audioUrl: doc.data().audioUrl || undefined // Include audioUrl if it exists
+        })) as { id: string; sender: string; text: string; timestamp?: any; type?: string; audioUrl?: string }[];
         setChatMessages(messages);
       }, (error: any) => {
         console.error("DIAG: Error fetching messages for session", currentChatSessionId, ":", error);
@@ -658,7 +675,7 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]);
 
 
   // Fetch initial trade logs and set up real-time listener
@@ -672,7 +689,19 @@ function TradingDashboardContent() {
 
       const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => {
         console.log("DIAG: onSnapshot for trade logs received data.");
-        const logs = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as any }));
+        // Explicitly map properties for trade logs
+        const logs = snapshot.docs.map((doc: any) => ({
+          id: doc.id,
+          currency_pair: doc.data().currency_pair,
+          trade_type: doc.data().trade_type,
+          entry_price: doc.data().entry_price,
+          exit_price: doc.data().exit_price,
+          quantity: doc.data().quantity,
+          profit_loss: doc.data().profit_loss,
+          strategy_used: doc.data().strategy_used,
+          notes: doc.data().notes,
+          timestamp: doc.data().timestamp,
+        })) as any[]; // Cast to any[] for now, or define a specific interface for TradeLogEntry
         setTradeLogEntries(logs);
       }, (error: any) => {
         console.error("DIAG: Error fetching trade logs:", error);
@@ -684,7 +713,7 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
 
   // Load settings from Firestore
   useEffect(() => {
@@ -718,7 +747,7 @@ function TradingDashboardContent() {
       };
       loadSettings();
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
 
 
   // Auto-scroll chat to bottom
