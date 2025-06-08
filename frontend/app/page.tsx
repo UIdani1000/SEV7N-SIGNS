@@ -1024,24 +1024,25 @@ function TradingDashboardContent() {
                             >
                               {/* Conditionally render with ReactMarkdown for AI messages */}
                               {msg.sender === "ai" ? (
-                                <ReactMarkdown
-                                  rehypePlugins={[rehypeRaw]}
-                                  className="prose prose-invert prose-p:my-1 prose-li:my-1 prose-li:leading-tight prose-ul:my-1 text-sm leading-relaxed"
-                                  components={{
-                                    // Custom components for styling Markdown elements
-                                    p: ({node, ...props}) => <p className="mb-2" {...props} />,
-                                    ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
-                                    ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
-                                    li: ({node, ...props}) => <li className="ml-4" {...props} />,
-                                    strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
-                                    em: ({node, ...props}) => <em className="italic" {...props} />,
-                                    h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
-                                    h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-1" {...props} />,
-                                    h3: ({node, ...props}) => <h3 className="text-md font-semibold mt-2 mb-1" {...props} />,
-                                  }}
-                                >
-                                  {msg.text}
-                                </ReactMarkdown>
+                                <div className="prose prose-invert prose-p:my-1 prose-li:my-1 prose-li:leading-tight prose-ul:my-1 text-sm leading-relaxed">
+                                  <ReactMarkdown
+                                    rehypePlugins={[rehypeRaw]}
+                                    components={{
+                                      // Custom components for styling Markdown elements
+                                      p: ({node, ...props}) => <p className="mb-2" {...props} />,
+                                      ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
+                                      ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-2" {...props} />,
+                                      li: ({node, ...props}) => <li className="ml-4" {...props} />,
+                                      strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
+                                      em: ({node, ...props}) => <em className="italic" {...props} />,
+                                      h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-4 mb-2" {...props} />,
+                                      h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-3 mb-1" {...props} />,
+                                      h3: ({node, ...props}) => <h3 className="text-md font-semibold mt-2 mb-1" {...props} />,
+                                    }}
+                                  >
+                                    {msg.text}
+                                  </ReactMarkdown>
+                                </div>
                               ) : (
                                 <p>{msg.text}</p>
                               )}
