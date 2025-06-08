@@ -7,8 +7,7 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
-// Import all necessary Firebase modules
-import { initializeApp, getApps, FirebaseApp } from "firebase/app"; // Added getApps
+import { initializeApp, getApps, FirebaseApp } from "firebase/app";
 import {
   getAuth,
   signInAnonymously,
@@ -31,10 +30,9 @@ import {
   where,
   orderBy,
   serverTimestamp,
-} from "firebase/firestore"; // Imported all firestore methods directly
+} from "firebase/firestore";
 
 
-// Create a simple object with directly imported firestore functions
 const firestoreModule = {
   collection,
   doc,
@@ -74,54 +72,40 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
   const [db, setDb] = useState<Firestore | null>(null);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false); // Authentication state (user logged in/out)
-  const [isFirebaseServicesReady, setIsFirebaseServicesReady] = useState(false); // Firebase app and services initialized
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isFirebaseServicesReady, setIsFirebaseServicesReady] = useState(false);
 
   useEffect(() => {
     console.log("FP: useEffect for Firebase initialization triggered.");
 
-    let firebaseConfigString = "";
+    // Construct firebaseConfig from individual environment variables
+    const firebaseConfig = {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+      measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+    };
 
-    // Prioritize NEXT_PUBLIC_FIREBASE_CONFIG from Vercel environment variables
-    if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
-      firebaseConfigString = process.env.NEXT_PUBLIC_FIREBASE_CONFIG;
-      console.log("FP: Using Firebase config from NEXT_PUBLIC_FIREBASE_CONFIG environment variable.");
-    }
-    // Fallback to Canvas's __firebase_config if NEXT_PUBLIC_FIREBASE_CONFIG is not set
-    else if (typeof window !== "undefined" && typeof (window as any).__firebase_config !== "undefined") {
-      firebaseConfigString = (window as any).__firebase_config;
-      console.log("FP: Using Firebase config from __firebase_config global variable.");
-    } else {
-      console.warn("FP: No Firebase config found in NEXT_PUBLIC_FIREBASE_CONFIG or __firebase_config. Firebase will not initialize.");
+    // Check for essential Firebase config properties
+    if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
+      console.error("FP: Firebase config is incomplete. Missing essential environment variables.");
+      console.error("FP: Received config:", firebaseConfig);
       setIsFirebaseServicesReady(false);
-      return; // Exit early if no config is available
+      return; // Exit early if config is invalid
     }
 
-    let firebaseConfig;
-    try {
-      firebaseConfig = JSON.parse(firebaseConfigString);
-      console.log("FP: Parsed Firebase Config:", firebaseConfig);
-    } catch (e) {
-      console.error("FP: Error parsing Firebase config string:", e);
-      // Removed alert, as we cannot use `setCurrentAlert` directly in provider
-      setIsFirebaseServicesReady(false);
-      return; // Exit if config is invalid
-    }
-
-    if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
-        console.error("FP: Firebase config is incomplete or invalid after parsing:", firebaseConfig);
-        setIsFirebaseServicesReady(false);
-        return;
-    }
+    console.log("FP: Constructed Firebase Config from environment variables:", firebaseConfig);
 
     let app: FirebaseApp;
     try {
-      // FIX: Use getApps().length to check for initialized apps
       if (getApps().length === 0) {
-        app = initializeApp(firebaseConfig);
+        app = initializeApp(firebaseConfig as any); // Type assertion as initializeApp expects specific config structure
         console.log("FP: Firebase app initialized.");
       } else {
-        app = getApps()[0]; // Get the default app if already initialized
+        app = getApps()[0];
         console.log("FP: Firebase app already initialized.");
       }
 
@@ -160,7 +144,7 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
             }
           } catch (error: any) {
             console.error("FP: Firebase sign-in failed:", error);
-            setIsAuthReady(false); // Authentication failed
+            setIsAuthReady(false);
             setUserId(null);
           }
         }
@@ -174,16 +158,15 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
       console.error("FP: Failed to initialize Firebase services:", e);
       setIsFirebaseServicesReady(false);
     }
-  }, []); // Empty dependency array means this runs once on mount
+  }, []);
 
-  // Provide the context value including the dynamic firestoreModule
   const contextValue = {
     db,
     auth,
     userId,
     isAuthReady,
     isFirebaseServicesReady,
-    firestoreModule: isFirebaseServicesReady ? firestoreModule : null, // Only expose if services are ready
+    firestoreModule: isFirebaseServicesReady ? firestoreModule : null,
   };
 
   console.log("FP: FirebaseContext current value:", contextValue);
