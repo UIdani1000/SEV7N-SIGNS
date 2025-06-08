@@ -23,7 +23,7 @@ import {
   Play,
   Save,
   FileText,
-  Settings, // Used for Settings page
+  Settings,
   Trash2,
   Edit2
 } from "lucide-react"
@@ -166,7 +166,7 @@ function TradingDashboardContent() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentChatSessionId, setCurrentChatSessionId] = useState<string | null>(null);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null); // Fixed: Initialized with null
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [aiAssistantName] = useState("Aura");
@@ -213,7 +213,7 @@ function TradingDashboardContent() {
   const [isSavingJournal, setIsSavingJournal] = useState(false)
   const [tradeLogError, setTradeLogError] = useState<string | null>(null);
 
-  // Settings states (reintroduced)
+  // Settings states
   const [backendUrlSetting, setBackendUrlSetting] = useState(BACKEND_BASE_URL);
   const [appIdSetting, setAppIdSetting] = useState(appId);
 
@@ -221,13 +221,15 @@ function TradingDashboardContent() {
   // --- HANDLERS ---
 
   const handleNewConversation = useCallback(async () => {
+    // Check if Firebase is ready before proceeding
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
-      setCurrentAlert({ message: "Firebase not ready. Cannot create new conversation.", type: "warning" });
+      setCurrentAlert({ message: "Chat service not ready. Please wait a moment for authentication to complete.", type: "warning" });
       console.warn("DIAG: Attempted to create new conversation, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
     console.log("DIAG: Creating new chat session...");
     try {
+      // Use the global appId for collection path
       const sessionsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions`);
       const newSessionRef = await firestoreModule.addDoc(sessionsCollectionRef, {
         name: "New Chat " + new Date().toLocaleString().split(',')[0],
@@ -315,8 +317,9 @@ function TradingDashboardContent() {
 
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
     if (!messageInput.trim() && !isVoice) return;
+    // Check if Firebase is ready before proceeding
     if (!db || !userId || !currentChatSessionId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
-      setCurrentAlert({ message: "Chat not ready. Please wait a moment or start a new conversation.", type: "warning" });
+      setCurrentAlert({ message: "Chat service not ready. Please wait a moment for authentication to complete.", type: "warning" });
       console.warn("DIAG: Attempted to send message, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
@@ -495,8 +498,9 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: "Please fill in all trade log fields.", type: "warning" });
       return;
     }
+    // Check if Firebase is ready before proceeding
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
-      setCurrentAlert({ message: "Firebase not ready. Cannot add trade log.", type: "warning" });
+      setCurrentAlert({ message: "Trade log service not ready. Please wait a moment for authentication to complete.", type: "warning" });
       console.warn("DIAG: Attempted to add trade log, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
@@ -550,8 +554,9 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: "Please select a trade and write a journal entry.", type: "warning" });
       return;
     }
+    // Check if Firebase is ready before proceeding
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
-      setCurrentAlert({ message: "Firebase not ready. Cannot save journal entry.", type: "warning" });
+      setCurrentAlert({ message: "Journal save service not ready. Please wait a moment for authentication to complete.", type: "warning" });
       console.warn("DIAG: Attempted to save journal, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
@@ -579,8 +584,9 @@ function TradingDashboardContent() {
   };
 
   const handleDeleteTradeLog = async (tradeId: string) => {
+    // Check if Firebase is ready before proceeding
     if (!db || !userId || !isAuthReady || !isFirebaseServicesReady || !firestoreModule) {
-      setCurrentAlert({ message: "Firebase not ready. Cannot delete trade log.", type: "warning" });
+      setCurrentAlert({ message: "Trade log deletion service not ready. Please wait a moment for authentication to complete.", type: "warning" });
       console.warn("DIAG: Attempted to delete trade log, but Firebase not ready. State: db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
       return;
     }
@@ -608,6 +614,7 @@ function TradingDashboardContent() {
 
   useEffect(() => {
     console.log("DIAG: useEffect for chat sessions listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+    // Only proceed if Firebase services are ready and user is authenticated
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
       const sessionsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions`);
       const q = firestoreModule.query(sessionsCollectionRef, firestoreModule.orderBy('createdAt', 'desc'));
@@ -642,6 +649,7 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     } else {
+      setChatSessions([]); // Clear sessions if not ready
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
   }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
@@ -649,7 +657,8 @@ function TradingDashboardContent() {
 
   useEffect(() => {
     console.log("DIAG: useEffect for chat messages listener triggered. db ready:", !!db, "userId ready:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
-    if (db && userId && currentChatSessionId && isFirebaseServicesReady && firestoreModule) {
+    // Only proceed if Firebase services are ready, user is authenticated, and a chat session is selected
+    if (db && userId && currentChatSessionId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
       const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
       const q = firestoreModule.query(messagesCollectionRef, firestoreModule.orderBy('timestamp', 'asc'));
 
@@ -674,10 +683,10 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     } else {
-      setChatMessages([]);
+      setChatMessages([]); // Clear messages if not ready or no session
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, isAuthReady, firestoreModule]);
 
   useEffect(() => {
     if (chatMessagesEndRef.current) {
@@ -703,7 +712,7 @@ function TradingDashboardContent() {
       console.log("DIAG: Market prices fetched successfully.", data);
     } catch (error: any) {
       console.error("DIAG: Error fetching market prices:", error);
-      setErrorPrices(error.message || "Failed to fetch market prices.");
+      setErrorPrices(error.message || "Failed to fetch market prices. Check backend URL.");
     } finally {
       if (initialLoad) {
         setLoadingPrices(false);
@@ -753,6 +762,7 @@ function TradingDashboardContent() {
   // Effect for fetching Trade Logs
   useEffect(() => {
     console.log("DIAG: useEffect for trade logs listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
+    // Only proceed if Firebase services are ready and user is authenticated
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
       setLoadingTradeLogs(true);
       const tradeLogsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/tradeLogs`);
@@ -784,7 +794,7 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     } else {
-      setTradeLogs([]);
+      setTradeLogs([]); // Clear logs if not ready
       setLoadingTradeLogs(false);
       console.log("DIAG: Trade logs listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
@@ -881,7 +891,7 @@ function TradingDashboardContent() {
           <h1 className="text-xl font-semibold">Aura Trading Dashboard</h1>
           <div className="flex items-center space-x-4">
             <Bell className="h-6 w-6 text-gray-400" />
-            <span className="text-sm text-gray-400 mr-2">User ID: {isAuthReady && isFirebaseServicesReady ? (userId ? `${userId.substring(0, 8)}...` : 'N/A') : 'Loading...'}</span>
+            <span className="text-sm text-gray-400 mr-2">User ID: {isAuthReady && isFirebaseServicesReady && userId ? `${userId.substring(0, 8)}...` : 'Loading User...'}</span>
             <User className="h-6 w-6 text-gray-400" />
           </div>
         </header>

@@ -1,212 +1,171 @@
+"use client";
+
 import React, {
   createContext,
   useContext,
   useState,
   useEffect,
-} from 'react';
+  ReactNode,
+} from "react";
+// Import all necessary Firebase modules
+import { initializeApp, FirebaseApp } from "firebase/app";
+import {
+  getAuth,
+  signInAnonymously,
+  signInWithCustomToken,
+  onAuthStateChanged,
+  Auth,
+  User as FirebaseAuthUser,
+} from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
 
-// Dynamically import Firebase modules
-// These 'let' declarations are necessary because functions from dynamically imported modules need to be assigned to them.
-let initializeApp: any;
-let getAuth: any;
-let signInAnonymously: any;
-let signInWithCustomToken: any;
-let onAuthStateChanged: any;
-let getFirestore: any;
-let doc: any;
-let getDoc: any;
-let addDoc: any;
-let setDoc: any;
-let updateDoc: any;
-let deleteDoc: any;
-let onSnapshot: any;
-let collection: any;
-let query: any;
-let where: any;
-let getDocs: any;
-let serverTimestamp: any;
-let orderBy: any; // Explicitly declare orderBy here
+// Dynamically import firestore methods within a module to avoid circular dependencies
+// and ensure they are only available when Firebase is ready.
+// This approach helps with tree-shaking and client-side only imports if needed,
+// though for this app, it's always client-side.
+const firestoreModule = {
+  collection: (await import("firebase/firestore")).collection,
+  doc: (await import("firebase/firestore")).doc,
+  addDoc: (await import("firebase/firestore")).addDoc,
+  setDoc: (await import("firebase/firestore")).setDoc,
+  updateDoc: (await import("firebase/firestore")).updateDoc,
+  deleteDoc: (await import("firebase/firestore")).deleteDoc,
+  onSnapshot: (await import("firebase/firestore")).onSnapshot,
+  query: (await import("firebase/firestore")).query,
+  where: (await import("firebase/firestore")).where,
+  orderBy: (await import("firebase/firestore")).orderBy,
+  serverTimestamp: (await import("firebase/firestore")).serverTimestamp,
+};
 
 
-// Define the shape of the Firebase context
 interface FirebaseContextType {
-  db: any; // Keeping 'any' for DB instance as its internal type is complex
-  auth: any; // Keeping 'any' for Auth instance as its internal type is complex
+  db: Firestore | null;
+  auth: Auth | null;
   userId: string | null;
   isAuthReady: boolean;
   isFirebaseServicesReady: boolean;
-  // Export Firebase modules for direct use in consuming components
-  firestoreModule: {
-    collection: typeof collection;
-    doc: typeof doc;
-    getDoc: typeof getDoc;
-    addDoc: typeof addDoc;
-    setDoc: typeof setDoc;
-    updateDoc: typeof updateDoc;
-    deleteDoc: typeof deleteDoc;
-    onSnapshot: typeof onSnapshot;
-    query: typeof query;
-    where: typeof where;
-    getDocs: typeof getDocs;
-    serverTimestamp: typeof serverTimestamp;
-    orderBy: typeof orderBy; // Expose orderBy here
-  } | null;
-  authModule: {
-    getAuth: typeof getAuth;
-    signInAnonymously: typeof signInAnonymously;
-    signInWithCustomToken: typeof signInWithCustomToken;
-    onAuthStateChanged: typeof onAuthStateChanged;
-  } | null;
+  firestoreModule: typeof firestoreModule | null;
 }
 
-// Create the context with a default null value
-const FirebaseContext = createContext<FirebaseContextType | null>(null);
+const FirebaseContext = createContext<FirebaseContextType>({
+  db: null,
+  auth: null,
+  userId: null,
+  isAuthReady: false,
+  isFirebaseServicesReady: false,
+  firestoreModule: null,
+});
 
-// FirebaseProvider component
-export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [db, setDb] = useState<any>(null);
-  const [auth, setAuth] = useState<any>(null);
+export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [db, setDb] = useState<Firestore | null>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
-  const [isFirebaseServicesReady, setIsFirebaseServicesReady] = useState<boolean>(false);
-  const [firestoreModule, setFirestoreModule] = useState<FirebaseContextType['firestoreModule']>(null);
-  const [authModule, setAuthModule] = useState<FirebaseContextType['authModule']>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false); // Authentication state (user logged in/out)
+  const [isFirebaseServicesReady, setIsFirebaseServicesReady] = useState(false); // Firebase app and services initialized
 
-  // Load Firebase services dynamically within useEffect
   useEffect(() => {
-    const loadFirebaseServiceModules = async () => {
-      // Only proceed if running in a browser environment
-      if (typeof window !== 'undefined') {
-        console.log("DIAG: Loading Firebase dynamic imports...");
+    console.log("FP: useEffect for Firebase initialization triggered.");
 
-        try {
-          // Dynamically import Firebase modules
-          const firebaseAppModule = await import("firebase/app");
-          const firebaseAuthModule = await import("firebase/auth");
-          const firebaseFirestoreModule = await import("firebase/firestore");
+    // IMPORTANT: Access global variables provided by Canvas environment
+    const firebaseConfigString =
+      typeof window !== "undefined" && typeof (window as any).__firebase_config !== "undefined"
+        ? (window as any).__firebase_config
+        : "{}"; // Default to empty object string if not provided
 
-          // Assign imported functions to our global variables
-          initializeApp = firebaseAppModule.initializeApp;
-          getAuth = firebaseAuthModule.getAuth;
-          signInAnonymously = firebaseAuthModule.signInAnonymously;
-          signInWithCustomToken = firebaseAuthModule.signInWithCustomToken;
-          onAuthStateChanged = firebaseAuthModule.onAuthStateChanged;
+    const initialAuthToken =
+      typeof window !== "undefined" && typeof (window as any).__initial_auth_token !== "undefined"
+        ? (window as any).__initial_auth_token
+        : null;
 
-          getFirestore = firebaseFirestoreModule.getFirestore;
-          collection = firebaseFirestoreModule.collection;
-          doc = firebaseFirestoreModule.doc;
-          getDoc = firebaseFirestoreModule.getDoc;
-          addDoc = firebaseFirestoreModule.addDoc;
-          setDoc = firebaseFirestoreModule.setDoc;
-          updateDoc = firebaseFirestoreModule.updateDoc;
-          deleteDoc = firebaseFirestoreModule.deleteDoc;
-          onSnapshot = firebaseFirestoreModule.onSnapshot;
-          query = firebaseFirestoreModule.query;
-          where = firebaseFirestoreModule.where;
-          getDocs = firebaseFirestoreModule.getDocs;
-          serverTimestamp = firebaseFirestoreModule.serverTimestamp;
-          orderBy = firebaseFirestoreModule.orderBy; // Assign orderBy here
+    let firebaseConfig;
+    try {
+      firebaseConfig = JSON.parse(firebaseConfigString);
+      console.log("FP: Parsed Firebase Config:", firebaseConfig);
+    } catch (e) {
+      console.error("FP: Error parsing Firebase config:", e);
+      // Fallback to a minimal config if parsing fails to prevent app crash
+      firebaseConfig = { apiKey: "mock-api-key", projectId: "mock-project", appId: "mock-app-id" };
+      setIsFirebaseServicesReady(false); // Indicate failure in config parsing
+      return; // Exit if config is invalid
+    }
 
+    if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
+        console.error("FP: Firebase config is incomplete or invalid:", firebaseConfig);
+        setIsFirebaseServicesReady(false);
+        return;
+    }
 
-          // Construct Firebase config from environment variables
-          const firebaseConfig = {
-            apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-            authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-            projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-            storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-            appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID, // Use NEXT_PUBLIC_FIREBASE_APP_ID here as well
-            measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-          };
-
-          const appInstance = initializeApp(firebaseConfig);
-          const authInstance = getAuth(appInstance);
-          const dbInstance = getFirestore(appInstance);
-
-          // Update state with initialized instances and modules
-          setAuth(authInstance);
-          setDb(dbInstance);
-
-          setFirestoreModule({
-            collection, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp, orderBy
-          });
-          setAuthModule({
-            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
-          });
-
-          setIsFirebaseServicesReady(true);
-          console.log("DIAG: Firebase services loaded and initialized.");
-        } catch (error) {
-          console.error("DIAG: Error loading Firebase modules or initializing:", error);
-          setIsFirebaseServicesReady(false);
-        }
+    let app: FirebaseApp;
+    try {
+      // Check if an app is already initialized to prevent re-initialization warnings
+      if (!FirebaseApp.apps || FirebaseApp.apps.length === 0) {
+        app = initializeApp(firebaseConfig);
+        console.log("FP: Firebase app initialized.");
+      } else {
+        app = FirebaseApp.apps[0];
+        console.log("FP: Firebase app already initialized.");
       }
-    };
 
-    loadFirebaseServiceModules();
-  }, []); // Empty dependency array means this runs once on mount
+      const firestore = getFirestore(app);
+      const firebaseAuth = getAuth(app);
 
-  // Authentication listener
-  useEffect(() => {
-    let unsubscribeAuth: () => void;
+      setDb(firestore);
+      setAuth(firebaseAuth);
+      setIsFirebaseServicesReady(true);
+      console.log("FP: Firestore and Auth services initialized.");
 
-    if (auth && isFirebaseServicesReady && authModule) {
-      console.log("DIAG: Setting up Firebase auth listener...");
-      unsubscribeAuth = authModule.onAuthStateChanged(auth, async (user: any) => {
+      const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
+        console.log("FP: Auth state changed. User:", user ? user.uid : "null");
         if (user) {
           setUserId(user.uid);
           setIsAuthReady(true);
-          console.log("DIAG: User signed in:", user.uid);
+          console.log("FP: User authenticated. UID:", user.uid);
         } else {
-          const initialAuthToken = typeof (window as any).__initial_auth_token !== 'undefined' ? (window as any).__initial_auth_token : null;
+          setUserId(null);
+          setIsAuthReady(false);
+          console.log("FP: User not authenticated. Attempting anonymous sign-in or custom token.");
           try {
             if (initialAuthToken) {
-              await authModule.signInWithCustomToken(auth, initialAuthToken);
-              console.log("DIAG: Signed in with custom token.");
+                console.log("FP: Attempting sign-in with custom token...");
+                await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                console.log("FP: Signed in with custom token.");
             } else {
-              await authModule.signInAnonymously(auth);
-              console.log("DIAG: Signed in anonymously.");
+                console.log("FP: No custom token. Attempting anonymous sign-in...");
+                await signInAnonymously(firebaseAuth);
+                console.log("FP: Signed in anonymously.");
             }
-          } catch (error) {
-            console.error("DIAG: Firebase anonymous sign-in failed:", error);
-            // Fallback to random ID if anonymous sign-in fails, but still mark ready
-            setUserId(crypto.randomUUID());
-            setIsAuthReady(true);
-            console.log("DIAG: Anonymous sign-in failed, using random userId.");
+          } catch (error: any) {
+            console.error("FP: Firebase sign-in failed:", error);
+            // Optionally, handle error state for UI
+            setIsAuthReady(false); // Authentication failed
+            setUserId(null);
           }
         }
       });
-    } else {
-      console.log("DIAG: Auth listener not set up. auth:", !!auth, "isFirebaseServicesReady:", isFirebaseServicesReady, "authModule:", !!authModule);
-      // If Firebase services aren't ready, and no userId is set, provide a temporary one to avoid crashes
-      // and allow components to proceed with rendering, even if not fully authenticated yet.
-      // This part ensures a userId is always present for Firestore paths even if auth isn't fully set up.
-      if (!userId && !isAuthReady && !isFirebaseServicesReady) { // Check if not already set or ready
-        setUserId(crypto.randomUUID());
-        setIsAuthReady(true);
-        console.log("DIAG: Firebase not ready, setting immediate random userId for initial render.");
-      }
-    }
 
-    return () => {
-      if (unsubscribeAuth) {
-        console.log("DIAG: Cleaning up auth listener.");
+      return () => {
+        console.log("FP: Cleaning up Firebase auth listener.");
         unsubscribeAuth();
-      }
-    };
-    // **Corrected Dependencies:** Removed setUserId and setIsAuthReady because they are stable setters.
-    // The effect only depends on the *values* of auth, isFirebaseServicesReady, and authModule.
-  }, [auth, isFirebaseServicesReady, authModule, userId, isAuthReady]); // Kept userId, isAuthReady for conditional logic within the effect itself.
+      };
+    } catch (e) {
+      console.error("FP: Failed to initialize Firebase services:", e);
+      setIsFirebaseServicesReady(false);
+    }
+  }, []); // Empty dependency array means this runs once on mount
 
+  // Provide the context value including the dynamic firestoreModule
   const contextValue = {
     db,
     auth,
     userId,
     isAuthReady,
     isFirebaseServicesReady,
-    firestoreModule,
-    authModule,
+    firestoreModule: isFirebaseServicesReady ? firestoreModule : null, // Only expose if services are ready
   };
+
+  console.log("FP: FirebaseContext current value:", contextValue);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
@@ -215,11 +174,10 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 };
 
-// Custom hook to use Firebase context
 export const useFirebase = () => {
   const context = useContext(FirebaseContext);
-  if (!context) {
-    throw new Error('useFirebase must be used within a FirebaseProvider');
+  if (context === undefined) {
+    throw new Error("useFirebase must be used within a FirebaseProvider");
   }
   return context;
 };
