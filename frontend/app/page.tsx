@@ -92,7 +92,7 @@ interface ChatSession {
   lastMessageTimestamp?: any;
 }
 
-// Interfaces for Trade Log (reintroduced)
+// Interfaces for Trade Log
 interface TradeLogEntry {
   id: string;
   currencyPair: string;
@@ -104,7 +104,7 @@ interface TradeLogEntry {
   journalEntry?: string;
 }
 
-interface JournalEntry {
+interface JournalEntry { // This interface is defined but not used directly, can be removed in a future cleanup if needed.
   tradeId: string;
   date: string;
   content: string;
@@ -172,10 +172,12 @@ function TradingDashboardContent() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentChatSessionId, setCurrentChatSessionId] = useState<string | null>(null);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>([]);
+  // FIX: mediaRecorderRef should be initialized with null
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [aiAssistantName] = useState("Aura");
+
 
   // Analysis Page Inputs and Results
   const [analysisCurrencyPair, setAnalysisCurrencyPair] = useState("BTC/USD")
@@ -202,7 +204,7 @@ function TradingDashboardContent() {
     { name: "Fibonacci Retracements", desc: "Key structural levels" },
   ]
 
-  // Trade Log states (reintroduced)
+  // Trade Log states
   const [tradeLogs, setTradeLogs] = useState<TradeLogEntry[]>([])
   const [loadingTradeLogs, setLoadingTradeLogs] = useState(true)
   const [tradeLogForm, setTradeLogForm] = useState({
@@ -256,7 +258,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
 
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
@@ -311,7 +313,7 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Backend fetch finished.");
     }
-  }, [db, userId, currentChatSessionId, firestoreModule, appId, setChatMessages]);
+  }, [db, userId, currentChatSessionId, firestoreModule, setChatMessages]); // Removed appId from dependency array
 
 
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
@@ -375,7 +377,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse, appId]);
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]); // Removed appId from dependency array
 
   const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
@@ -491,7 +493,7 @@ function TradingDashboardContent() {
     }
   };
 
-  // Trade Log Handlers (reintroduced)
+  // Trade Log Handlers
   const handleAddTradeLog = async () => {
     if (!tradeLogForm.currencyPair || !tradeLogForm.entryPrice || !tradeLogForm.exitPrice || !tradeLogForm.volume) {
       setCurrentAlert({ message: "Please fill in all trade log fields.", type: "warning" });
@@ -587,8 +589,11 @@ function TradingDashboardContent() {
       return;
     }
 
-    setTradeLogError(null); // Clear any previous error
-    if (window.confirm("Are you sure you want to delete this trade log?")) { // Using window.confirm temporarily, will replace with custom modal
+    setTradeLogError(null);
+    // IMPORTANT: Replace window.confirm with a custom modal for production apps.
+    // For this debug session, it's left as is for simplicity, but in Canvas/Production,
+    // this would be replaced with a proper UI component.
+    if (window.confirm("Are you sure you want to delete this trade log?")) {
       try {
         const tradeDocRef = firestoreModule.doc(db, `artifacts/${appId}/users/${userId}/tradeLogs`, tradeId);
         await firestoreModule.deleteDoc(tradeDocRef);
@@ -643,7 +648,7 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]); // Removed appId from dependency array
 
 
   useEffect(() => {
@@ -676,7 +681,7 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]);
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
 
   useEffect(() => {
     if (chatMessagesEndRef.current) {
@@ -749,7 +754,7 @@ function TradingDashboardContent() {
   }, [activeView, analysisCurrencyPair, fetchAnalysisLivePrice]);
 
 
-  // Effect for fetching Trade Logs (reintroduced)
+  // Effect for fetching Trade Logs
   useEffect(() => {
     console.log("DIAG: useEffect for trade logs listener triggered. db ready:", !!db, "userId ready:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule);
     if (db && userId && isAuthReady && isFirebaseServicesReady && firestoreModule) {
@@ -787,7 +792,7 @@ function TradingDashboardContent() {
       setLoadingTradeLogs(false);
       console.log("DIAG: Trade logs listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
 
 
   return (
@@ -1493,7 +1498,7 @@ function TradingDashboardContent() {
               </div>
             )}
 
-            {/* Trade Log View (reintroduced) */}
+            {/* Trade Log View */}
             {activeView === "trade-log" && (
               <div className="flex flex-col space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-6">Trade Log & Journal</h2>
