@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-// Import all necessary Lucide-React icons (added TrendingUp/Down for dashboard)
+// Import ALL necessary Lucide-React icons (added Card components, DollarSign, BarChart3, Settings, FileText for Analysis)
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card" // Added for Analysis Cards
 import {
   Home,
   MessageCircle,
@@ -12,12 +13,19 @@ import {
   Bot,
   User,
   Send,
+  ChevronDown, // Added for dropdowns in Analysis/Settings
   Plus,
+  Save, // Added for Analysis/Journal
+  Play, // Added for Run Analysis button
+  TrendingDown,
   History,
   SquarePen,
   Mic,
   Volume2,
-  TrendingDown // Added for dashboard market overview
+  DollarSign, // Added for Analysis/Dashboard
+  BarChart3,  // Added for Analysis/Dashboard
+  Settings,   // Added for Settings (next step, but included here for completeness of original imports)
+  FileText    // Added for Journal (next step, but included here for completeness of original imports)
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -33,7 +41,34 @@ const appId = process.env.NEXT_PUBLIC_APP_ID || 'default-app-id';
 console.log("DIAG: Initial appId (from environment or fallback):", appId);
 
 
-// Define interfaces for Market Data (reintroduced for dashboard)
+// Define interfaces for the expected API response structure (reintroduced for Analysis)
+interface AISuggestion {
+  entry_type: string;
+  recommended_action: string;
+  position_size: string;
+}
+
+interface PriceDetail {
+  price: string;
+  percentage_change: string;
+}
+
+interface AnalysisResult {
+  confidence_score: string;
+  signal_strength: string;
+  market_summary: string;
+  ai_suggestion: AISuggestion;
+  stop_loss: PriceDetail;
+  take_profit_1: PriceDetail;
+  take_profit_2: PriceDetail;
+  technical_indicators_analysis: string;
+  next_step_for_user: string;
+  ormcr_confirmation_status: string;
+  ormcr_overall_bias: string;
+  ormcr_reason: string;
+}
+
+// Market Data (for Dashboard and Analysis Live Price) (kept)
 interface MarketData {
   price: number | string;
   percent_change: number | string;
@@ -48,7 +83,7 @@ interface AllMarketPrices {
   [key: string]: MarketData;
 }
 
-// Interface for a chat session (from previous step, kept)
+// Interface for a chat session (kept)
 interface ChatSession {
   id: string;
   name: string;
@@ -105,14 +140,13 @@ function TradingDashboardContent() {
   const [currentAlert, setCurrentAlert] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
   const [isChatHistoryMobileOpen, setIsChatHistoryMobileOpen] = useState(false); // Right overlay sidebar toggle
 
-  // Market Data states (reintroduced)
+  // Market Data states (kept)
   const [marketPrices, setMarketPrices] = useState<AllMarketPrices>({})
   const [loadingPrices, setLoadingPrices] = useState(true)
   const [errorPrices, setErrorPrices] = useState<string | null>(null)
-  const [currentLivePrice, setCurrentLivePrice] = useState<string>('N/A'); // Used in Analysis, but kept for consistency with original
+  const [currentLivePrice, setCurrentLivePrice] = useState<string>('N/A');
 
-
-  // Chat states (kept from previous step)
+  // Chat states (kept)
   const [messageInput, setMessageInput] = useState("")
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
@@ -128,11 +162,38 @@ function TradingDashboardContent() {
   // Simple hardcoded for now, will reintroduce settings loading later
   const [aiAssistantName] = useState("Aura");
 
-  // Alerts (dashboard) - Placeholder (reintroduced for dashboard)
+  // Alerts (dashboard) - Placeholder (kept)
   const [alerts] = useState<Array<{ id: number; message: string; type: string }>>([
     { id: 1, message: 'BTC/USD - Strong Buy Signal', type: 'buy' },
     { id: 2, message: 'ETH/USD - Price Drop Alert', type: 'sell' },
   ]);
+
+  // Analysis Page Inputs and Results (reintroduced)
+  const [analysisCurrencyPair, setAnalysisCurrencyPair] = useState("BTC/USD")
+  const [analysisTimeframes, setAnalysisTimeframes] = useState<string[]>([])
+  const [analysisTradeType, setAnalysisTradeType] = useState("Scalp (Quick trades)")
+  const [analysisIndicators, setAnalysisIndicators] = useState<string[]>([
+    "RSI", "MACD", "Moving Averages", "Bollinger Bands", "Stochastic Oscillator", "Volume", "ATR", "Fibonacci Retracements"
+  ])
+  const [analysisBalance, setAnalysisBalance] = useState("10000")
+  const [analysisLeverage, setAnalysisLeverage] = useState("1x (No Leverage)")
+  const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+
+  // Hardcoded for Analysis (reintroduced)
+  const availableTimeframes = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
+  const availableIndicators = [
+    { name: "RSI", desc: "Relative Sth Index" },
+    { name: "Stochastic Oscillator", desc: "Momentum oscillator" },
+    { name: "MACD", desc: "Moving Average Convergence" },
+    { name: "Moving Averages", desc: "SMA/EMA trends" },
+    { name: "Bollinger Bands", desc: "Volatility bands" },
+    { name: "Volume", desc: "Trading volume analysis" },
+    { name: "ATR", desc: "Average True Range" },
+    { name: "Fibonacci Retracements", desc: "Key structural levels" },
+  ]
+
 
   // --- HANDLERS ---
 
@@ -338,6 +399,83 @@ function TradingDashboardContent() {
     }
   }, []);
 
+
+  // Handler for running ORMCR Analysis (reintroduced)
+  const handleRunAnalysis = async () => {
+    if (!analysisCurrencyPair || analysisTimeframes.length === 0 || !analysisBalance || !analysisLeverage) {
+      setCurrentAlert({ message: "Please select a Currency Pair, at least one Timeframe, Available Balance, and Leverage.", type: "warning" });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisError(null);
+    setAnalysisResults(null);
+
+    const analysisInput = {
+      currencyPair: analysisCurrencyPair,
+      timeframes: analysisTimeframes,
+      tradeType: analysisTradeType,
+      indicators: analysisIndicators,
+      availableBalance: parseFloat(analysisBalance),
+      leverage: analysisLeverage.includes('x (No Leverage)') ? 1 : parseFloat(analysisLeverage.replace('x', '')),
+    };
+    console.log("DIAG: Running analysis with input:", analysisInput, "to backend:", BACKEND_BASE_URL + "/run_ormcr_analysis");
+
+    try {
+      const response = await fetch(`${BACKEND_BASE_URL}/run_ormcr_analysis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...analysisInput, userId }), // Pass userId to backend
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({error: response.statusText}));
+        throw new Error(`Backend error! Status: ${response.status}. Message: ${errorData.error || "Unknown response"}`);
+      }
+
+      const data: AnalysisResult = await response.json();
+      setAnalysisResults(data);
+      setCurrentAlert({ message: "ORSCR Analysis completed!", type: "success" });
+      console.log("DIAG: Analysis results received:", data);
+
+    } catch (error: any) {
+      console.error("DIAG: Error running ORMCR analysis:", error);
+      setAnalysisError(error.message || "Failed to run analysis.");
+      setCurrentAlert({ message: `Analysis failed: ${error.message || "Unknown error"}. Check backend deployment.`, type: "error" });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleIndicatorChange = (indicatorName: string) => {
+    setAnalysisIndicators(prev =>
+      prev.includes(indicatorName)
+        ? prev.filter(name => name !== indicatorName)
+        : [...prev, indicatorName]
+    );
+  };
+
+  const handleTimeframeButtonClick = (tf: string) => {
+    setAnalysisTimeframes(prev => {
+      const newTimeframes = prev.includes(tf)
+        ? prev.filter(selectedTf => selectedTf !== tf)
+        : [...prev, tf];
+      const order = ['D1', 'H4', 'H1', 'M30', 'M15', 'M5', 'M1'];
+      return newTimeframes.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    });
+  };
+
+  const handleChatAboutAnalysis = () => {
+    if (analysisResults && analysisResults.market_summary) {
+      const analysisSummary = analysisResults.market_summary;
+      setMessageInput(`Regarding the recent analysis for ${analysisCurrencyPair}:\n\n${analysisSummary}\n\nWhat do you think about this?`);
+      setActiveView("chat");
+    } else {
+      setCurrentAlert({ message: "No analysis results to chat about.", type: "warning" });
+    }
+  };
+
+
   // --- USE EFFECTS ---
 
   // Effect for fetching chat sessions (kept)
@@ -423,7 +561,7 @@ function TradingDashboardContent() {
   }, [chatMessages, activeView, isChatHistoryMobileOpen]);
 
 
-  // Fetch market prices for dashboard (reintroduced)
+  // Fetch market prices for dashboard (kept)
   const fetchMarketPricesData = useCallback(async (initialLoad = false) => {
     console.log("DIAG: Fetching market prices from:", BACKEND_BASE_URL + "/all_market_prices");
     try {
@@ -449,13 +587,47 @@ function TradingDashboardContent() {
     }
   }, []);
 
-  // Effect for fetching market prices (reintroduced)
+  // Effect for fetching market prices (kept)
   useEffect(() => {
-    fetchMarketPricesData(true); // Fetch immediately on component mount
+    fetchMarketPricesData(true);
 
-    const intervalId = setInterval(() => fetchMarketPricesData(false), 10000); // Then every 10 seconds
-    return () => clearInterval(intervalId); // Cleanup interval on unmount
+    const intervalId = setInterval(() => fetchMarketPricesData(false), 10000);
+    return () => clearInterval(intervalId);
   }, [fetchMarketPricesData]);
+
+  // Fetch live price for the selected currency pair on Analysis page (reintroduced)
+  const fetchAnalysisLivePrice = useCallback(async (pair: string) => {
+    console.log("DIAG: Fetching analysis live price for:", pair, "from:", BACKEND_BASE_URL + "/all_market_prices");
+    try {
+      // Ensure the symbol matches what the backend expects (e.g., BTC/USD -> BTCUSDT)
+      const backendSymbol = pair.replace('/', '') + 'T';
+      const response = await fetch(`${BACKEND_BASE_URL}/all_market_prices`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! Status: ${response.status}. Response: ${errorText}`);
+      }
+      const data: AllMarketPrices = await response.json();
+      if (data[backendSymbol] && typeof data[backendSymbol].price === 'number') {
+        setCurrentLivePrice(data[backendSymbol].price.toLocaleString());
+        console.log("DIAG: Analysis live price fetched:", data[backendSymbol].price);
+      } else {
+        setCurrentLivePrice('N/A');
+        console.warn("DIAG: Analysis live price not found for", backendSymbol, data);
+      }
+    } catch (e: any) {
+      console.error("DIAG: Error fetching live price for analysis page:", e);
+      setCurrentLivePrice('Error');
+    }
+  }, []);
+
+  // Effect for fetching analysis live price (reintroduced)
+  useEffect(() => {
+    if (activeView === 'analysis') {
+      fetchAnalysisLivePrice(analysisCurrencyPair);
+      const intervalId = setInterval(() => fetchAnalysisLivePrice(analysisCurrencyPair), 10000);
+      return () => clearInterval(intervalId);
+    }
+  }, [activeView, analysisCurrencyPair, fetchAnalysisLivePrice]);
 
 
   return (
@@ -500,7 +672,19 @@ function TradingDashboardContent() {
             <MessageCircle className="h-5 w-5" />
             Aura Chat
           </a>
-          {/* Other navigation links (Analysis, Trade Log, Settings) are still removed */}
+          <a
+            className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              activeView === "analysis"
+                ? "bg-gray-800 text-purple-400"
+                : "text-gray-400 hover:bg-gray-800 hover:text-white"
+            }`}
+            href="#"
+            onClick={() => { setActiveView("analysis"); setSidebarOpen(false); }}
+          >
+            <BarChart3 className="h-5 w-5" />
+            Analysis
+          </a>
+          {/* Other navigation links (Trade Log, Settings) are still removed */}
         </nav>
       </aside>
 
@@ -522,7 +706,7 @@ function TradingDashboardContent() {
           <main className="flex-1 p-6">
             {currentAlert && <CustomAlert message={currentAlert.message} type={currentAlert.type} onClose={() => setCurrentAlert(null)} />}
 
-            {/* Dashboard View (reintroduced Market Overview) */}
+            {/* Dashboard View (Market Overview) */}
             {activeView === "dashboard" && (
               <div className="flex flex-col space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-6">Market Overview</h2>
@@ -561,7 +745,7 @@ function TradingDashboardContent() {
                   </div>
                 )}
 
-                {/* Placeholder for Alerts and Market Selection in Dashboard */}
+                {/* Placeholder for Alerts and Market Selection in Dashboard (keeping structure for consistency) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
                     <h3 className="text-xl font-semibold mb-4">Trading Performance (Placeholder)</h3>
@@ -581,7 +765,7 @@ function TradingDashboardContent() {
               </div>
             )}
 
-            {/* Chat View (kept from previous step) */}
+            {/* Chat View (kept) */}
             {activeView === "chat" && (
               <div className="flex flex-col md:flex-row h-full bg-gray-900 rounded-lg shadow-xl overflow-hidden relative">
                 {/* Chat Header - Grok-like */}
@@ -801,7 +985,323 @@ function TradingDashboardContent() {
                 </div>
               </div>
             )}
-            {/* Other views will be added back here */}
+
+            {/* Analysis View (reintroduced) */}
+            {activeView === "analysis" && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 space-y-6">
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-purple-500/30 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-purple-300">MARKET SELECTION</h3>
+                      <BarChart3 className="w-5 h-5 text-purple-400" />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Currency Pair</label>
+                        <select
+                          className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                          value={analysisCurrencyPair}
+                          onChange={(e) => setAnalysisCurrencyPair(e.target.value)}
+                        >
+                          <option>BTC/USD</option>
+                          <option>ETH/USD</option>
+                          <option>ADA/USD</option>
+                          <option>SOL/USD</option>
+                          <option>DOGE/USD</option>
+                          <option>XRP/USD</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Timeframe</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {availableTimeframes.map(tf => (
+                            <button
+                              key={tf}
+                              onClick={() => handleTimeframeButtonClick(tf)}
+                              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors
+                                ${analysisTimeframes.includes(tf)
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-gray-800/50 border border-gray-600 text-gray-300 hover:bg-gray-700/50'
+                                }`}
+                            >
+                              {tf}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Trade Type</label>
+                        <select
+                          className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                          value={analysisTradeType}
+                          onChange={(e) => setAnalysisTradeType(e.target.value)}
+                        >
+                          <option>Scalp (Quick trades)</option>
+                          <option>Day Trade (Intraday)</option>
+                          <option>Long Hold (Position)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-blue-500/30 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-blue-300">TECHNICAL INDICATORS</h3>
+                      <TrendingUp className="w-5 h-5 text-blue-400" />
+                    </div>
+
+                    <div className="space-y-3">
+                      {availableIndicators.map((indicator) => (
+                        <div
+                          key={indicator.name}
+                          className="flex items-center justify-between p-2 hover:bg-gray-700/30 rounded"
+                        >
+                          <div>
+                            <div className="font-medium text-sm">{indicator.name}</div>
+                            <div className="text-xs text-gray-400">{indicator.desc}</div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={analysisIndicators.includes(indicator.name)}
+                            onChange={() => handleIndicatorChange(indicator.name)}
+                            className="w-4 h-4 text-purple-600 bg-gray-700 border-gray-600 rounded focus:ring-purple-500"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-emerald-500/30 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-emerald-300">TRADING PARAMETERS</h3>
+                      <DollarSign className="w-5 h-5 text-emerald-400" />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Available Balance</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                          placeholder="10000.00"
+                          value={analysisBalance}
+                          onChange={(e) => setAnalysisBalance(e.target.value)}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Leverage</label>
+                        <select
+                          className="w-full bg-gray-800/50 border border-gray-600 text-white rounded-md px-4 py-2"
+                          value={analysisLeverage}
+                          onChange={(e) => setAnalysisLeverage(e.target.value)}
+                        >
+                          <option>1x (No Leverage)</option>
+                          <option>1x5 (5x Leverage)</option>
+                          <option>1x10 (10x Leverage)</option>
+                          <option>1x25 (25x Leverage)</option>
+                          <option>1x50 (50x Leverage)</option>
+                          <option>1x100 (100x Leverage)</option>
+                          <option>1x200 (200x Leverage)</option>
+                        </select>
+                      </div>
+
+                      <button
+                        onClick={handleRunAnalysis}
+                        disabled={isAnalyzing}
+                        className="w-full inline-flex items-center justify-center px-5 py-3 rounded-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-50"
+                      >
+                        {isAnalyzing ? (
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                        ) : (
+                          <Play className="w-4 h-4 mr-2" />
+                        )}
+                        {isAnalyzing ? "Analyzing..." : "Run AI Analysis"}
+                      </button>
+                      {analysisError && <p className="text-red-500 text-sm mt-2">{analysisError}</p>}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-cyan-500/30 p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-cyan-300">LIVE MARKET DATA</h3>
+                      <div className="flex items-center text-emerald-400">
+                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse mr-2"></div>
+                        <span className="text-sm">Connected</span>
+                      </div>
+                    </div>
+
+                    {loadingPrices && <p>Loading live market data...</p>}
+                    {errorPrices && <p className="text-red-500">Error loading live data.</p>}
+                    {!loadingPrices && !errorPrices ? (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                          <div className="text-sm text-gray-400">Current Price</div>
+                          <div className="text-lg font-bold text-white">
+                            ${currentLivePrice}
+                          </div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                          <div className="text-sm text-gray-400">24h Change</div>
+                          {/* !!! CRITICAL FIX: Ensure type check before comparison !!! */}
+                          <div className={`text-lg font-bold ${typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number' && marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.percent_change === 'number'
+                              ? `${marketPrices[analysisCurrencyPair.replace('/', 'USDT')].percent_change.toFixed(2)}%`
+                              : 'N/A'}
+                          </div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                          <div className="text-sm text-gray-400">Volume</div>
+                          <div className="text-lg font-bold text-blue-400">
+                            {typeof marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.volume === 'number'
+                              ? marketPrices[analysisCurrencyPair.replace('/', 'USDT')].volume.toFixed(2)
+                              : 'N/A'}
+                          </div>
+                        </div>
+                        <div className="text-center p-3 bg-gray-700/30 rounded-lg">
+                          <div className="text-sm text-gray-400">Signal</div>
+                          <div className={`text-lg font-bold ${
+                              marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.orscr_signal === "BUY" ? 'text-green-500' :
+                              marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.orscr_signal === "SELL" ? 'text-red-500' : 'text-yellow-500'
+                          }`}>
+                              {marketPrices[analysisCurrencyPair.replace('/', 'USDT')]?.orscr_signal || 'N/A'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-400">Select a currency pair to see live data.</p>
+                    )}
+                  </div>
+
+                  <div className="bg-gray-800/40 rounded-xl shadow-lg border border-emerald-500/30 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-semibold text-emerald-300">AI ANALYSIS RESULTS</h3>
+                      <div className="flex items-center text-purple-400">
+                        <Bot className="w-5 h-5 mr-2" />
+                        <span className="text-sm">Powered by Gemini AI</span>
+                      </div>
+                    </div>
+
+                    {isAnalyzing && (
+                      <div className="text-center p-10 text-gray-500">
+                        <div className="flex items-center justify-center mt-4">
+                          <svg className="animate-spin h-5 w-5 text-purple-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <p className="mt-2 text-indigo-400">Analyzing...</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isAnalyzing && analysisResults ? (
+                      <div className="space-y-6">
+                        <div className="text-center p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg">
+                          <div className="text-sm text-emerald-300 mb-2">CONFIDENCE SCORE</div>
+                          <div className="text-4xl font-bold text-emerald-400 mb-2">{analysisResults.confidence_score}</div>
+                          <div className="text-sm text-emerald-300">{analysisResults.signal_strength}</div>
+                        </div>
+
+                        <div className="p-4 bg-gray-700/30 rounded-lg">
+                          <h4 className="font-semibold text-white mb-3 flex items-center">
+                            <BarChart3 className="w-4 h-4 mr-2" />
+                            Market Summary
+                          </h4>
+                          <p className="text-gray-300 text-sm leading-relaxed">
+                            {analysisResults.market_summary}
+                          </p>
+                        </div>
+
+                        <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                          <h4 className="font-semibold text-blue-300 mb-3 flex items-center">
+                            <TrendingUp className="w-4 h-4 mr-2" />
+                            AI Suggestion
+                          </h4>
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-300">Entry Type:</span>
+                              <span className="font-bold text-emerald-400">{analysisResults.ai_suggestion.entry_type}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-300">Recommended Action:</span>
+                              <span className="font-bold text-emerald-400">{analysisResults.ai_suggestion.recommended_action}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-300">Position Size:</span>
+                                <span className="font-bold text-white">{analysisResults.ai_suggestion.position_size}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {analysisResults.ormcr_confirmation_status === "STRONG CONFIRMATION" && (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="p-4 bg-red-900/20 border border-red-500/30 rounded-lg text-center">
+                              <div className="text-sm text-red-300 mb-1">Stop Loss</div>
+                              <div className="text-xl font-bold text-red-400">{analysisResults.stop_loss.price}</div>
+                              <div className="text-xs text-red-300">{analysisResults.stop_loss.percentage_change}</div>
+                            </div>
+                            <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg text-center">
+                              <div className="text-sm text-emerald-300 mb-1">Take Profit 1</div>
+                              <div className="text-xl font-bold text-emerald-400">{analysisResults.take_profit_1.price}</div>
+                              <div className="text-xs text-emerald-300">{analysisResults.take_profit_1.percentage_change}</div>
+                            </div>
+                            <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg text-center">
+                              <div className="text-sm text-emerald-300 mb-1">Take Profit 2</div>
+                              <div className="text-xl font-bold text-emerald-400">{analysisResults.take_profit_2.price}</div>
+                              <div className="text-xs text-emerald-300">{analysisResults.take_profit_2.percentage_change}</div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="p-4 bg-gray-700/30 rounded-lg">
+                          <h4 className="font-semibold text-white mb-3">Technical Indicators Analysis</h4>
+                          {analysisResults.technical_indicators_analysis && (
+                            <div className="mt-2 text-sm text-gray-300">
+                              {analysisResults.technical_indicators_analysis}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="p-4 bg-gray-700/30 rounded-lg">
+                          <h4 className="font-semibold text-white mb-3">Next Step for User</h4>
+                          <p className="text-gray-300 text-sm leading-relaxed">
+                            {analysisResults.next_step_for_user}
+                          </p>
+                        </div>
+
+                        <div className="flex gap-4">
+                          <button
+                            onClick={handleChatAboutAnalysis}
+                            className="flex-1 inline-flex items-center justify-center px-5 py-3 rounded-lg font-semibold bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transition-all duration-200"
+                          >
+                            <MessageCircle className="w-4 h-4 mr-2" />
+                            Chat About This Analysis
+                          </button>
+                          <button className="inline-flex items-center justify-center px-5 py-3 rounded-lg font-semibold bg-gray-700 text-gray-300 hover:bg-gray-600 transition-all duration-200">
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Analysis
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center p-10 text-gray-500">
+                        <p>Run an AI analysis to see detailed results here.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Other views (Trade Log, Settings) will be added back here */}
           </main>
         </div>
       </div>
