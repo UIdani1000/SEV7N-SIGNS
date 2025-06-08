@@ -52,7 +52,7 @@ interface FirebaseContextType {
   } | null;
   authModule: {
     getAuth: typeof getAuth;
-    isAuthReady: typeof isAuthReady; // Added isAuthReady
+    // Removed isAuthReady from authModule interface as it's a state, not a function to be exposed this way
     signInAnonymously: typeof signInAnonymously;
     signInWithCustomToken: typeof signInWithCustomToken;
     onAuthStateChanged: typeof onAuthStateChanged;
@@ -130,7 +130,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             collection, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp
           });
           setAuthModule({
-            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, isAuthReady // Added isAuthReady to authModule
+            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
           });
 
           setIsFirebaseServicesReady(true);
@@ -188,14 +188,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
 
-    // Fixed: Added all necessary dependencies to the useEffect array
+    // Fixed: Added all necessary dependencies to the useEffect array, removed unnecessary ones.
     return () => {
       if (unsubscribeAuth) {
         console.log("DIAG: Cleaning up auth listener.");
         unsubscribeAuth();
       }
     };
-  }, [auth, isFirebaseServicesReady, authModule, userId, isAuthReady]); // Added userId, isAuthReady to dependencies
+  }, [auth, isFirebaseServicesReady, authModule, setUserId, setIsAuthReady]); // Removed userId and isAuthReady from dep array as they are setState functions
 
   const contextValue = {
     db,
