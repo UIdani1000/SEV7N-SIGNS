@@ -190,7 +190,8 @@ function TradingDashboardContent() {
   const [exitPrice, setExitPrice] = useState("")
   const [quantity, setQuantity] = useState("")
   const [profitLoss, setProfitLoss] = useState("")
-  const [strategyUsed, setStrategyUsed = useState("ORSCr Strategy")
+  // SYNTAX ERROR FIX: Corrected useState assignment for strategyUsed
+  const [strategyUsed, setStrategyUsed] = useState("ORSCr Strategy")
   const [tradeNotes, setTradeNotes] = useState("")
 
 
