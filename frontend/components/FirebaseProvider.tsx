@@ -8,7 +8,7 @@ import React, {
   ReactNode,
 } from "react";
 // Import all necessary Firebase modules
-import { initializeApp, FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, FirebaseApp } from "firebase/app"; // Added getApps
 import {
   getAuth,
   signInAnonymously,
@@ -17,24 +17,36 @@ import {
   Auth,
   User as FirebaseAuthUser,
 } from "firebase/auth";
-import { getFirestore, Firestore } from "firebase/firestore";
+import {
+  getFirestore,
+  Firestore,
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore"; // Imported all firestore methods directly
 
-// Dynamically import firestore methods within a module to avoid circular dependencies
-// and ensure they are only available when Firebase is ready.
-// This approach helps with tree-shaking and client-side only imports if needed,
-// though for this app, it's always client-side.
+
+// Create a simple object with directly imported firestore functions
 const firestoreModule = {
-  collection: (await import("firebase/firestore")).collection,
-  doc: (await import("firebase/firestore")).doc,
-  addDoc: (await import("firebase/firestore")).addDoc,
-  setDoc: (await import("firebase/firestore")).setDoc,
-  updateDoc: (await import("firebase/firestore")).updateDoc,
-  deleteDoc: (await import("firebase/firestore")).deleteDoc,
-  onSnapshot: (await import("firebase/firestore")).onSnapshot,
-  query: (await import("firebase/firestore")).query,
-  where: (await import("firebase/firestore")).where,
-  orderBy: (await import("firebase/firestore")).orderBy,
-  serverTimestamp: (await import("firebase/firestore")).serverTimestamp,
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
 };
 
 
@@ -99,12 +111,12 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
 
     let app: FirebaseApp;
     try {
-      // Check if an app is already initialized to prevent re-initialization warnings
-      if (!FirebaseApp.apps || FirebaseApp.apps.length === 0) {
+      // FIX: Use getApps().length to check for initialized apps
+      if (getApps().length === 0) {
         app = initializeApp(firebaseConfig);
         console.log("FP: Firebase app initialized.");
       } else {
-        app = FirebaseApp.apps[0];
+        app = getApps()[0]; // Get the default app if already initialized
         console.log("FP: Firebase app already initialized.");
       }
 
