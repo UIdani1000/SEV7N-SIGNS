@@ -57,10 +57,13 @@ export default function TradingDashboardWrapper() {
 
 // This component now contains the actual application logic and uses the useFirebase hook.
 function TradingDashboardContent() {
-  const { userId, isAuthReady, isFirebaseServicesReady } = useFirebase(); // Only use what's needed for minimal view
+  // We explicitly destructure only what's absolutely necessary for the minimal UI
+  const { userId, isAuthReady, isFirebaseServicesReady } = useFirebase();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentAlert, setCurrentAlert] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
+
+  // No other state variables or complex logic for this ultra-minimal test
 
   return (
     <div className="flex h-screen bg-gray-900 text-white">
@@ -88,7 +91,7 @@ function TradingDashboardContent() {
             <Home className="h-5 w-5" />
             Dashboard
           </a>
-          {/* Other navigation links removed for minimal test */}
+          {/* Other navigation links are completely removed for this test */}
         </nav>
       </aside>
 
@@ -110,11 +113,9 @@ function TradingDashboardContent() {
           <main className="flex-1 p-6">
             {currentAlert && <CustomAlert message={currentAlert.message} type={currentAlert.type} onClose={() => setCurrentAlert(null)} />}
 
-            {/* Only the dashboard view, minimal content */}
-            <div className="flex flex-col space-y-6">
-              <h2 className="text-2xl font-bold text-white mb-6">Market Overview (Minimal)</h2>
-              <p className="text-gray-400">Loading essential application parts...</p>
-              <p className="text-gray-400">If this deploys, we'll start adding components back piece by piece.</p>
+                        <div className="flex flex-col space-y-6">
+              <h2 className="text-2xl font-bold text-white mb-6">Application Shell</h2>
+              <p className="text-gray-400">If this deploys, the core setup is working. We will then add more features back one by one.</p>
             </div>
           </main>
         </div>
