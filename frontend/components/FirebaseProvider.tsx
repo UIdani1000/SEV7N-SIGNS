@@ -78,26 +78,25 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     console.log("FP: useEffect for Firebase initialization triggered.");
 
-    // Construct firebaseConfig from individual environment variables
+    // TEMPORARY: Hardcode Firebase configuration for debugging
     const firebaseConfig = {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-      measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+      apiKey: "REDACTED_GOOGLE_KEY",
+      authDomain: "aura-trading-bot.firebaseapp.com",
+      projectId: "aura-trading-bot",
+      storageBucket: "aura-trading-bot.firebasestorage.app",
+      messagingSenderId: "441694658366",
+      appId: "1:441694658366:web:ceb57d91755dcaf33c966f",
+      measurementId: "G-36SQ27BB3N"
     };
 
-    // Check for essential Firebase config properties
+    // This check is now less critical with hardcoded values, but good to keep
     if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
-      console.error("FP: Firebase config is incomplete. Missing essential environment variables.");
-      console.error("FP: Received config:", firebaseConfig);
+      console.error("FP: Firebase config is incomplete or invalid after hardcoding (this should not happen).", firebaseConfig);
       setIsFirebaseServicesReady(false);
-      return; // Exit early if config is invalid
+      return;
     }
 
-    console.log("FP: Constructed Firebase Config from environment variables:", firebaseConfig);
+    console.log("FP: Using hardcoded Firebase Config:", firebaseConfig);
 
     let app: FirebaseApp;
     try {
@@ -117,6 +116,7 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
       setIsFirebaseServicesReady(true);
       console.log("FP: Firestore and Auth services initialized.");
 
+      // Initial auth token still comes from Canvas environment if available
       const initialAuthToken =
         typeof window !== "undefined" && typeof (window as any).__initial_auth_token !== "undefined"
           ? (window as any).__initial_auth_token
