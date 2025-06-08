@@ -80,31 +80,36 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     console.log("FP: useEffect for Firebase initialization triggered.");
 
-    // IMPORTANT: Access global variables provided by Canvas environment
-    const firebaseConfigString =
-      typeof window !== "undefined" && typeof (window as any).__firebase_config !== "undefined"
-        ? (window as any).__firebase_config
-        : "{}"; // Default to empty object string if not provided
+    let firebaseConfigString = "";
 
-    const initialAuthToken =
-      typeof window !== "undefined" && typeof (window as any).__initial_auth_token !== "undefined"
-        ? (window as any).__initial_auth_token
-        : null;
+    // Prioritize NEXT_PUBLIC_FIREBASE_CONFIG from Vercel environment variables
+    if (process.env.NEXT_PUBLIC_FIREBASE_CONFIG) {
+      firebaseConfigString = process.env.NEXT_PUBLIC_FIREBASE_CONFIG;
+      console.log("FP: Using Firebase config from NEXT_PUBLIC_FIREBASE_CONFIG environment variable.");
+    }
+    // Fallback to Canvas's __firebase_config if NEXT_PUBLIC_FIREBASE_CONFIG is not set
+    else if (typeof window !== "undefined" && typeof (window as any).__firebase_config !== "undefined") {
+      firebaseConfigString = (window as any).__firebase_config;
+      console.log("FP: Using Firebase config from __firebase_config global variable.");
+    } else {
+      console.warn("FP: No Firebase config found in NEXT_PUBLIC_FIREBASE_CONFIG or __firebase_config. Firebase will not initialize.");
+      setIsFirebaseServicesReady(false);
+      return; // Exit early if no config is available
+    }
 
     let firebaseConfig;
     try {
       firebaseConfig = JSON.parse(firebaseConfigString);
       console.log("FP: Parsed Firebase Config:", firebaseConfig);
     } catch (e) {
-      console.error("FP: Error parsing Firebase config:", e);
-      // Fallback to a minimal config if parsing fails to prevent app crash
-      firebaseConfig = { apiKey: "mock-api-key", projectId: "mock-project", appId: "mock-app-id" };
-      setIsFirebaseServicesReady(false); // Indicate failure in config parsing
+      console.error("FP: Error parsing Firebase config string:", e);
+      // Removed alert, as we cannot use `setCurrentAlert` directly in provider
+      setIsFirebaseServicesReady(false);
       return; // Exit if config is invalid
     }
 
     if (!firebaseConfig || !firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.appId) {
-        console.error("FP: Firebase config is incomplete or invalid:", firebaseConfig);
+        console.error("FP: Firebase config is incomplete or invalid after parsing:", firebaseConfig);
         setIsFirebaseServicesReady(false);
         return;
     }
@@ -128,6 +133,11 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
       setIsFirebaseServicesReady(true);
       console.log("FP: Firestore and Auth services initialized.");
 
+      const initialAuthToken =
+        typeof window !== "undefined" && typeof (window as any).__initial_auth_token !== "undefined"
+          ? (window as any).__initial_auth_token
+          : null;
+
       const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
         console.log("FP: Auth state changed. User:", user ? user.uid : "null");
         if (user) {
@@ -150,7 +160,6 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({
             }
           } catch (error: any) {
             console.error("FP: Firebase sign-in failed:", error);
-            // Optionally, handle error state for UI
             setIsAuthReady(false); // Authentication failed
             setUserId(null);
           }
