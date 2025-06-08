@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
-// Import ALL necessary Lucide-React icons (added Card components, DollarSign, BarChart3, Settings, FileText for Analysis)
+// Import ALL necessary Lucide-React icons
 import {
   Home,
   MessageCircle,
@@ -22,10 +22,10 @@ import {
   BarChart3,
   Play,
   Save,
-  FileText, // Re-added for Trade Log / Journal
-  Settings, // Re-added for Settings (next step)
-  Trash2, // For deleting trade logs
-  Edit2 // For editing trade logs
+  FileText,
+  Settings, // Used for Settings page
+  Trash2,
+  Edit2
 } from "lucide-react"
 
 // Import the new FirebaseProvider and useFirebase hook
@@ -104,12 +104,6 @@ interface TradeLogEntry {
   journalEntry?: string;
 }
 
-interface JournalEntry { // This interface is defined but not used directly, can be removed in a future cleanup if needed.
-  tradeId: string;
-  date: string;
-  content: string;
-}
-
 // Custom Alert/Message component
 const CustomAlert: React.FC<{ message: string; type: 'success' | 'error' | 'warning' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
   const bgColor = {
@@ -172,8 +166,7 @@ function TradingDashboardContent() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [currentChatSessionId, setCurrentChatSessionId] = useState<string | null>(null);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  // FIX: mediaRecorderRef should be initialized with null
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null); // Fixed: Initialized with null
   const audioChunksRef = useRef<Blob[]>([]);
 
   const [aiAssistantName] = useState("Aura");
@@ -220,6 +213,10 @@ function TradingDashboardContent() {
   const [isSavingJournal, setIsSavingJournal] = useState(false)
   const [tradeLogError, setTradeLogError] = useState<string | null>(null);
 
+  // Settings states (reintroduced)
+  const [backendUrlSetting, setBackendUrlSetting] = useState(BACKEND_BASE_URL);
+  const [appIdSetting, setAppIdSetting] = useState(appId);
+
 
   // --- HANDLERS ---
 
@@ -258,7 +255,7 @@ function TradingDashboardContent() {
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
-  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
+  }, [db, userId, aiAssistantName, isAuthReady, isFirebaseServicesReady, firestoreModule]); // appId is a constant from env, not a dependency
 
   const handleSwitchConversation = (sessionId: string) => {
     setCurrentChatSessionId(sessionId);
@@ -313,7 +310,7 @@ function TradingDashboardContent() {
       setIsSendingMessage(false);
       console.log("DIAG: Backend fetch finished.");
     }
-  }, [db, userId, currentChatSessionId, firestoreModule, setChatMessages]); // Removed appId from dependency array
+  }, [db, userId, currentChatSessionId, firestoreModule, setChatMessages]); // appId is a constant from env, not a dependency
 
 
   const handleSendMessage = useCallback(async (isVoice = false, audioBlob?: Blob) => {
@@ -377,7 +374,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: `Error sending message: ${error.message || "Unknown error"}`, type: "error" });
       setIsSendingMessage(false);
     }
-  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]); // Removed appId from dependency array
+  }, [messageInput, db, userId, currentChatSessionId, isAuthReady, isFirebaseServicesReady, firestoreModule, chatMessages, chatSessions, fetchBackendChatResponse]); // appId is a constant from env, not a dependency
 
   const handleStartVoiceRecording = useCallback(async () => {
     if (typeof window === 'undefined' || !navigator.mediaDevices) {
@@ -390,7 +387,6 @@ function TradingDashboardContent() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Ensure mediaRecorderRef.current is assigned a new MediaRecorder instance
       mediaRecorderRef.current = new MediaRecorder(stream);
       mediaRecorderRef.current.ondataavailable = (event) => {
         audioChunksRef.current.push(event.data);
@@ -648,7 +644,7 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]); // Removed appId from dependency array
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
 
 
   useEffect(() => {
@@ -681,7 +677,7 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
 
   useEffect(() => {
     if (chatMessagesEndRef.current) {
@@ -792,7 +788,7 @@ function TradingDashboardContent() {
       setLoadingTradeLogs(false);
       console.log("DIAG: Trade logs listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]); // Removed appId from dependency array
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
 
 
   return (
@@ -1675,17 +1671,50 @@ function TradingDashboardContent() {
               </div>
             )}
 
-            {/* Settings View (placeholder for now) */}
+            {/* Settings View */}
             {activeView === "settings" && (
               <div className="flex flex-col space-y-6">
                 <h2 className="text-2xl font-bold text-white mb-6">Settings</h2>
-                <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-                  <h3 className="text-xl font-semibold mb-4">API Configuration (Placeholder)</h3>
-                  <p className="text-gray-400">Settings for API keys, backend URL, etc. will go here.</p>
+
+                {/* API Configuration */}
+                <div className="bg-gray-800/40 rounded-xl shadow-lg border border-blue-500/30 p-6">
+                  <h3 className="text-lg font-semibold text-blue-300 mb-4">API Configuration</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Backend URL (Read-only)</label>
+                      <input
+                        type="text"
+                        readOnly
+                        className="w-full bg-gray-800/50 border border-gray-600 text-gray-400 rounded-md px-4 py-2 cursor-not-allowed"
+                        value={backendUrlSetting}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">This is set via environment variables (NEXT_PUBLIC_BACKEND_BASE_URL).</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">App ID (Read-only)</label>
+                      <input
+                        type="text"
+                        readOnly
+                        className="w-full bg-gray-800/50 border border-gray-600 text-gray-400 rounded-md px-4 py-2 cursor-not-allowed"
+                        value={appIdSetting}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">This is set via environment variables (NEXT_PUBLIC_APP_ID).</p>
+                    </div>
+                    {/* Future: Add more API key inputs here if needed */}
+                  </div>
                 </div>
-                <div className="bg-gray-800/50 rounded-lg p-6 shadow-lg border border-gray-700">
-                  <h3 className="text-xl font-semibold mb-4">User Preferences (Placeholder)</h3>
-                  <p className="text-gray-400">Theme, notifications, and other user preferences will go here.</p>
+
+                {/* User Preferences */}
+                <div className="bg-gray-800/40 rounded-xl shadow-lg border border-purple-500/30 p-6">
+                  <h3 className="text-lg font-semibold text-purple-300 mb-4">User Preferences (Placeholder)</h3>
+                  <p className="text-gray-400">Future settings like theme, notification preferences, etc., will be added here.</p>
+                  {/* Example placeholder for a user preference */}
+                  <div className="mt-4">
+                    <label className="flex items-center space-x-2">
+                      <input type="checkbox" className="form-checkbox text-purple-600 bg-gray-700 border-gray-600 rounded" />
+                      <span className="text-gray-300">Enable Dark Mode (Already default)</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
