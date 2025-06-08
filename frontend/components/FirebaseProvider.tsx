@@ -3,15 +3,12 @@ import React, {
   useContext,
   useState,
   useEffect,
-  // Removed useCallback as it was unused in FirebaseProvider.tsx
 } from 'react';
 
 // Dynamically import Firebase modules to avoid bundling them if not needed or
 // to allow them to be loaded on demand. This also helps with Next.js SSR.
-// Declaring these as 'let' outside allows them to be assigned inside useEffect.
-let firebaseApp: any;
-let firebaseAuth: any;
-let firebaseFirestore: any;
+// These 'let' declarations remain because functions from dynamically imported modules need to be assigned to them.
+let initializeApp: any;
 let getAuth: any;
 let signInAnonymously: any;
 let signInWithCustomToken: any;
@@ -33,8 +30,8 @@ let serverTimestamp: any;
 
 // Define the shape of the Firebase context
 interface FirebaseContextType {
-  db: any;
-  auth: any;
+  db: any; // Keeping 'any' for DB instance as its internal type is complex
+  auth: any; // Keeping 'any' for Auth instance as its internal type is complex
   userId: string | null;
   isAuthReady: boolean;
   isFirebaseServicesReady: boolean;
@@ -55,6 +52,7 @@ interface FirebaseContextType {
   } | null;
   authModule: {
     getAuth: typeof getAuth;
+    isAuthReady: typeof isAuthReady; // Added isAuthReady
     signInAnonymously: typeof signInAnonymously;
     signInWithCustomToken: typeof signInWithCustomToken;
     onAuthStateChanged: typeof onAuthStateChanged;
@@ -87,12 +85,8 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           const firebaseAuthModule = await import("firebase/auth");
           const firebaseFirestoreModule = await import("firebase/firestore");
 
-          // Assign imported functions/objects to our global variables
-          firebaseApp = firebaseAppModule.initializeApp;
-          firebaseAuth = firebaseAuthModule; // This is the module itself
-          firebaseFirestore = firebaseFirestoreModule; // This is the module itself
-
-          // Destructure specific functions for direct use/export
+          // Assign imported functions to our global variables
+          initializeApp = firebaseAppModule.initializeApp; // Correct assignment
           getAuth = firebaseAuthModule.getAuth;
           signInAnonymously = firebaseAuthModule.signInAnonymously;
           signInWithCustomToken = firebaseAuthModule.signInWithCustomToken;
@@ -124,7 +118,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
           };
 
-          const appInstance = firebaseApp(firebaseConfig);
+          const appInstance = initializeApp(firebaseConfig); // Use initializeApp here
           const authInstance = getAuth(appInstance);
           const dbInstance = getFirestore(appInstance);
 
@@ -136,7 +130,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             collection, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, query, where, getDocs, serverTimestamp
           });
           setAuthModule({
-            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged
+            getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, isAuthReady // Added isAuthReady to authModule
           });
 
           setIsFirebaseServicesReady(true);
@@ -166,7 +160,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         } else {
           // If no user, try to sign in anonymously using the initial token if available
           // Otherwise, sign in anonymously to ensure a userId for Firestore rules
-          const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+          const initialAuthToken = typeof (window as any).__initial_auth_token !== 'undefined' ? (window as any).__initial_auth_token : null; // Access __initial_auth_token from window
           try {
             if (initialAuthToken) {
               await authModule.signInWithCustomToken(auth, initialAuthToken);
@@ -194,13 +188,14 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     }
 
+    // Fixed: Added all necessary dependencies to the useEffect array
     return () => {
       if (unsubscribeAuth) {
         console.log("DIAG: Cleaning up auth listener.");
         unsubscribeAuth();
       }
     };
-  }, [auth, isFirebaseServicesReady, authModule]); // Dependencies for this useEffect
+  }, [auth, isFirebaseServicesReady, authModule, userId, isAuthReady]); // Added userId, isAuthReady to dependencies
 
   const contextValue = {
     db,

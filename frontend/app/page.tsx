@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, BarChart3, Settings, FileText } from "lucide-react" // Removed ArrowUpRight, ArrowDownRight (as they were unused)
-import { useRouter } from 'next/navigation';
+import { DollarSign, BarChart3, Settings, FileText } from "lucide-react"
+// No longer importing useRouter as it's not directly used in the component's JSX or logic
+// import { useRouter } from 'next/navigation';
 
 // Import the new FirebaseProvider and useFirebase hook
 import { FirebaseProvider, useFirebase } from '@/components/FirebaseProvider';
 
-// Import all necessary Lucide-React icons (ensure these are available after pnpm install lucide-react)
+// Import all necessary Lucide-React icons
 import {
   Home,
   MessageCircle,
@@ -18,17 +19,11 @@ import {
   Bell,
   Bot,
   User,
-  // Mic, // Removed - unused
   Send,
-  // Target, // Removed - unused
-  // Calendar, // Removed - unused
-  // ToggleLeft, // Removed - unused
-  // ToggleRight, // Removed - unused
   ChevronDown,
   Plus,
   Save,
   Play,
-  // Volume2, // Removed - unused
   TrendingDown,
   History,
   SquarePen
@@ -91,7 +86,7 @@ interface AllMarketPrices {
 interface ChatSession {
   id: string;
   name: string; // The display name for the chat session
-  createdAt: any; // Firebase Timestamp - Will address 'any' later if needed
+  createdAt: any; // Firebase Timestamp - Keeping 'any' as its Firebase specific type, which is complex to fully type here
   lastMessageText: string;
 }
 
@@ -135,7 +130,8 @@ export default function TradingDashboardWrapper() {
 
 // This component now contains the actual application logic and uses the useFirebase hook.
 function TradingDashboardContent() {
-  const router = useRouter(); // Keeping router for now, will remove if truly unused later
+  // Removed useRouter call as the 'router' variable was never used.
+  // const router = useRouter();
 
   // We get all Firebase related states and modules from our context
   // Removed 'auth' and 'authModule' from destructuring as they are not directly used in this component's JSX or logic
@@ -159,7 +155,7 @@ function TradingDashboardContent() {
   const [isSendingMessage, setIsSendingMessage] = useState(false)
   const chatMessagesEndRef = useRef<HTMLDivElement>(null)
   const [chatMessages, setChatMessages] = useState<
-    { id: string; sender: string; text: string; timestamp?: any }[]
+    { id: string; sender: string; text: string; timestamp?: any }[] // Keeping 'any' for timestamp here for Firebase flexibility
   >([]);
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]); // List of chat sessions
@@ -183,7 +179,7 @@ function TradingDashboardContent() {
 
   // Journal/Trade Log states
   const [isViewingTradeLog, setIsViewingTradeLog] = useState(true)
-  const [tradeLogEntries, setTradeLogEntries] = useState<any[]>([])
+  const [tradeLogEntries, setTradeLogEntries] = useState<any[]>([]) // Keeping 'any' for trade log entries
 
   // Trade Entry Form states
   const [tradeDate, setTradeDate] = useState("")
@@ -258,7 +254,7 @@ function TradingDashboardContent() {
       await firestoreModule.addDoc(messagesCollectionRef, initialGreeting);
       console.log("DIAG: Initial greeting added to new chat session.");
 
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error creating new conversation:", error);
       setCurrentAlert({ message: `Failed to start new conversation: ${error.message}`, type: "error" });
     }
@@ -302,7 +298,7 @@ function TradingDashboardContent() {
         lastMessageText: userMessage.text,
         lastMessageTimestamp: userMessage.timestamp,
         // Optionally update name if it's the first message
-        name: chatMessages.length === 0 ? userMessage.text.substring(0, 30) + (userMessage.text.length > 30 ? '...' : '') : (chatSessions.find((s: any) => s.id === currentChatSessionId)?.name || "Untitled Chat"),
+        name: chatMessages.length === 0 ? userMessage.text.substring(0, 30) + (userMessage.text.length > 30 ? '...' : '') : (chatSessions.find((s: ChatSession) => s.id === currentChatSessionId)?.name || "Untitled Chat"),
       }, { merge: true });
 
 
@@ -342,7 +338,7 @@ function TradingDashboardContent() {
       }, { merge: true });
 
 
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error sending message or getting AI response:", error);
       setCurrentAlert({ message: `Failed to get AI response. Check backend deployment and URL: ${error.message || "Unknown error"}`, type: "error" });
       const errorMessage = { id: crypto.randomUUID(), sender: "ai", text: `Oops! I encountered an error getting a response from the backend: ${error.message || "Unknown error"}. Please check your backend's status and its URL configuration in Vercel. 😅`, timestamp: firestoreModule ? firestoreModule.serverTimestamp() : null };
@@ -384,7 +380,7 @@ function TradingDashboardContent() {
       await firestoreModule.setDoc(settingsDocRef, settings, { merge: true });
       setCurrentAlert({ message: "Settings saved successfully!", type: "success" });
       console.log("DIAG: Settings saved successfully:", settings);
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error saving settings:", error);
       setCurrentAlert({ message: `Failed to save settings: ${error.message}`, type: "error" });
     }
@@ -443,7 +439,7 @@ function TradingDashboardContent() {
       setTradeNotes("");
       setIsViewingTradeLog(true);
 
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error logging trade:", error);
       setCurrentAlert({ message: `Failed to log trade: ${error.message || "Unknown error"}`, type: "error" });
     }
@@ -487,7 +483,7 @@ function TradingDashboardContent() {
       setCurrentAlert({ message: "ORSCR Analysis completed!", type: "success" });
       console.log("DIAG: Analysis results received:", data);
 
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error running ORMCR analysis:", error);
       setAnalysisError(error.message || "Failed to run analysis.");
       setCurrentAlert({ message: `Analysis failed: ${error.message || "Unknown error"}. Check backend deployment.`, type: "error" });
@@ -534,12 +530,14 @@ function TradingDashboardContent() {
       const sessionsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions`);
       const q = firestoreModule.query(sessionsCollectionRef, firestoreModule.orderBy('createdAt', 'desc'));
 
-      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot) => { // Removed 'any' from snapshot
+      // Correctly type snapshot from Firestore
+      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => { // Keeping 'any' for now, can be specific Firestore types
         console.log("DIAG: onSnapshot for chat sessions received data.");
-        const sessions = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() as ChatSession })); // Removed 'any' from doc.data()
+        // Explicitly casting doc.data() to ChatSession
+        const sessions = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as ChatSession }));
         setChatSessions(sessions);
 
-        if (!currentChatSessionId || !sessions.some((s) => s.id === currentChatSessionId)) { // Removed 'any' from s
+        if (!currentChatSessionId || !sessions.some((s: ChatSession) => s.id === currentChatSessionId)) {
           if (sessions.length > 0) {
             setCurrentChatSessionId(sessions[0].id);
             console.log("DIAG: Setting currentChatSessionId to most recent:", sessions[0].id);
@@ -549,7 +547,7 @@ function TradingDashboardContent() {
             // We won't automatically create a new chat here; the user will click "New Chat" from the empty state
           }
         }
-      }, (error: any) => { // Keeping 'any' for error for now, will address later if blocking.
+      }, (error: any) => { // Keep 'any' for generic error type for now
         console.error("DIAG: Error fetching chat sessions:", error);
         setCurrentAlert({ message: `Failed to load chat sessions: ${error.message || 'Unknown error'}`, type: "error" });
       });
@@ -561,7 +559,7 @@ function TradingDashboardContent() {
     } else {
       console.log("DIAG: Chat sessions listener not ready. Skipping. (db:", !!db, "userId:", !!userId, "isAuthReady:", isAuthReady, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, currentChatSessionId, firestoreModule, appId]); // Added appId to dependencies
 
 
   // Effect for fetching messages of the currently active chat session
@@ -571,11 +569,13 @@ function TradingDashboardContent() {
       const messagesCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/chatSessions/${currentChatSessionId}/messages`);
       const q = firestoreModule.query(messagesCollectionRef, firestoreModule.orderBy('timestamp'));
 
-      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot) => { // Removed 'any' from snapshot
+      // Correctly type snapshot from Firestore
+      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => { // Keeping 'any' for now, can be specific Firestore types
         console.log("DIAG: onSnapshot for chat messages received data for session:", currentChatSessionId);
-        const messages = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() as any })); // Keeping 'any' for doc.data() for now.
+        // Explicitly casting doc.data() to ChatMessage (or keeping 'any' if types are too complex)
+        const messages = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as any })); // Keeping 'any' for doc.data() for now.
         setChatMessages(messages);
-      }, (error: any) => { // Keeping 'any' for error for now, will address later if blocking.
+      }, (error: any) => { // Keep 'any' for generic error type for now
         console.error("DIAG: Error fetching messages for session", currentChatSessionId, ":", error);
         setCurrentAlert({ message: `Failed to load messages for chat session ${currentChatSessionId}: ${error.message || 'Unknown error'}.`, type: "error" });
       });
@@ -588,7 +588,7 @@ function TradingDashboardContent() {
       setChatMessages([]);
       console.log("DIAG: Chat messages cleared or listener skipped. (db:", !!db, "userId:", !!userId, "currentChatSessionId:", !!currentChatSessionId, "isFirebaseServicesReady:", isFirebaseServicesReady, "firestoreModule:", !!firestoreModule, ")");
     }
-  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, currentChatSessionId, isFirebaseServicesReady, firestoreModule, appId]); // Added appId to dependencies
 
 
   // Fetch initial trade logs and set up real-time listener
@@ -598,11 +598,12 @@ function TradingDashboardContent() {
       const tradeLogsCollectionRef = firestoreModule.collection(db, `artifacts/${appId}/users/${userId}/tradeLogs`);
       const q = firestoreModule.query(tradeLogsCollectionRef, firestoreModule.orderBy('timestamp', 'desc'));
 
-      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot) => { // Removed 'any' from snapshot
+      // Correctly type snapshot from Firestore
+      const unsubscribe = firestoreModule.onSnapshot(q, (snapshot: any) => { // Keeping 'any' for now, can be specific Firestore types
         console.log("DIAG: onSnapshot for trade logs received data.");
-        const logs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() as any })); // Keeping 'any' for doc.data() for now.
+        const logs = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() as any })); // Keeping 'any' for doc.data() for now.
         setTradeLogEntries(logs);
-      }, (error: any) => { // Keeping 'any' for error for now, will address later if blocking.
+      }, (error: any) => { // Keep 'any' for generic error type for now
         console.error("DIAG: Error fetching trade logs:", error);
         setCurrentAlert({ message: `Failed to load trade logs: ${error.message || 'Unknown error'}`, type: "error" });
       });
@@ -612,7 +613,7 @@ function TradingDashboardContent() {
         unsubscribe();
       };
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]); // Added appId to dependencies
 
   // Load settings from Firestore
   useEffect(() => {
@@ -631,7 +632,6 @@ function TradingDashboardContent() {
             setVoiceCommandsEnabled(settings.voiceCommandsEnabled !== undefined ? settings.voiceCommandsEnabled : false);
             setTextToSpeechEnabled(settings.textToSpeechEnabled !== undefined ? settings.textToSpeechEnabled : false);
             setDefaultCurrencyPair(settings.defaultCurrencyPair || "BTC/USD");
-            setDefaultTimeframe(settings.defaultTimeframe || "1H");
             setAnalysisBalance(settings.analysisBalance || "10000");
             setAnalysisLeverage(settings.analysisLeverage || "1x (No Leverage)");
             setAnalysisIndicators(Array.isArray(settings.analysisIndicators) ? settings.analysisIndicators : ["RSI", "MACD", "Moving Averages", "Bollinger Bands", "Stochastic Oscillator", "Volume", "ATR", "Fibonacci Retracements"]);
@@ -639,14 +639,14 @@ function TradingDashboardContent() {
           } else {
             console.log("DIAG: No settings document found, using defaults.");
           }
-        } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+        } catch (error: any) { // Keep 'any' for generic error type for now
           console.error("DIAG: Error loading settings:", error);
           setCurrentAlert({ message: `Failed to load settings: ${error.message || 'Unknown error'}`, type: "error" });
         }
       };
       loadSettings();
     }
-  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule]);
+  }, [db, userId, isAuthReady, isFirebaseServicesReady, firestoreModule, appId]); // Added appId to dependencies
 
 
   // Auto-scroll chat to bottom
@@ -673,7 +673,7 @@ function TradingDashboardContent() {
       const data: AllMarketPrices = await response.json();
       setMarketPrices(data);
       console.log("DIAG: Market prices fetched successfully.", data);
-    } catch (error: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (error: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error fetching market prices:", error);
       setErrorPrices(error.message || "Failed to fetch market prices.");
     } finally {
@@ -709,7 +709,7 @@ function TradingDashboardContent() {
         setCurrentLivePrice('N/A');
         console.warn("DIAG: Analysis live price not found for", backendSymbol, data);
       }
-    } catch (e: any) { // Keeping 'any' for error for now, will address later if blocking.
+    } catch (e: any) { // Keep 'any' for generic error type for now
       console.error("DIAG: Error fetching live price for analysis page:", e);
       setCurrentLivePrice('Error');
     }
@@ -945,10 +945,7 @@ function TradingDashboardContent() {
                         if (currentChatSessionId) {
                             setCurrentChatSessionId(null);
                             setChatMessages([]);
-                        } else {
-                            // This might be redundant if the main X is used to toggle sidebar
-                            // but good for explicit state management.
-                        }
+                        } // else { /* No other action needed if currentChatSessionId is null */ }
                       }}
                   >
                       {currentChatSessionId ? <X className="h-6 w-6" /> : null}
