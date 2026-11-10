@@ -85,5 +85,35 @@ def test_market_view(fake_market, client):
     for v in d["strategies"]:
         assert v["checks"] and 0 <= v["met"] <= v["total"] and "signal" in v
     g = client.get("/api/market?symbol=GOLD").get_json()
-    assert g["tested"] is False and all(v["tested_here"] is False for v in g["strategies"])
+    assert g["tested"] is False
+    by = {(v["strategy"], v["side"]): v for v in g["strategies"]}
+    assert by[("squeeze", "long")]["tested_here"] is True and "40 trades" in by[("squeeze", "long")]["note"]
+    assert by[("pullback", "long")]["tested_here"] is False and "lost money" in by[("pullback", "long")]["note"]
     assert client.get("/api/market?symbol=NOPE").status_code == 400
+
+def test_scalp_live(fake_market, client, monkeypatch):
+    def fake(symbol, tf, limit=300, include_live=False):
+        freq = {"5m": "5min", "15m": "15min", "1h": "1h", "4h": "4h", "1d": "1D"}[tf]
+        end = pd.Timestamp.now(tz="UTC").floor(freq)
+        return make(400, freq, start=end - pd.Timedelta(freq) * 399, seed=3).iloc[-limit:]
+    monkeypatch.setattr(S, "fetch_candles", fake)
+    d = client.get("/api/scalp?symbol=BTCUSDT").get_json()
+    assert len(d["sides"]) == 2 and all(len(v["checks"]) == 7 for v in d["sides"])
+    assert client.get("/api/scalp?symbol=DOGEUSDT").status_code == 400
+
+def test_lab_engine_on_synthetic(monkeypatch):
+    import lab
+    base = make(3000, "1h", start="2024-01-01", seed=7)
+    monkeypatch.setattr(lab, "_download", lambda s, tf: base.tz_localize(None))
+    rules = {"name": "t", "symbol": "BTCUSDT", "timeframe": "1h",
+             "long": [{"type": "compare", "a": {"ind": "ema", "period": 21}, "op": ">", "b": {"ind": "ema", "period": 50}, "tf": "4h"},
+                      {"type": "cross", "a": {"ind": "macd"}, "b": {"ind": "macd_signal"}, "dir": "above", "within": 2},
+                      {"type": "touch", "level": {"ind": "ema", "period": 21}, "within": 3, "from": "above"}],
+             "short": [], "stop": {"type": "atr", "mult": 1.5}, "target": {"type": "rr", "value": 3}, "max_hold_bars": 48,
+             "claimed": {"win_rate": 80}}
+    rep = lab.backtest(rules, 25, 2)
+    assert rep["trades"] > 0 and "win_rate" in rep and rep["by_year"]
+    assert any("claims" in f for f in rep["flags"])        # fake-backtest flag fires for an 80% claim
+    import pytest
+    with pytest.raises(lab.RuleError):
+        lab.validate({**rules, "timeframe": "1h", "long": [{"type": "candle", "pattern": "dragon"}]})

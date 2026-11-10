@@ -62,10 +62,11 @@ export function usd(x: number) { return `$${x.toFixed(x < 10 ? 2 : 0)}`; }
 
 // ---------- storage
 const KEY = "sev7n-signs-v1";
-export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number; pair?: string }
+export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number; pair?: string; prop?: PropState; updatedAt?: number }
 export const DEFAULTS: Store = { balance: 25, riskPct: 6, paper: [], startBalance: 25 };
 export function load(): Store { try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); return s ? { ...DEFAULTS, ...s } : DEFAULTS; } catch { return DEFAULTS; } }
 export function save(s: Store) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage full or blocked */ } }
+export function stamp(s: Store): Store { return { ...s, updatedAt: Date.now() }; }
 export const STATS_LABEL = "Tested figures come from 2020–2026 backtests with fees and funding. A handful of paper trades will swing far from them; judge after 30+.";
 
 // ---------- markets
@@ -78,3 +79,49 @@ export interface MarketView {
 }
 export const getMarkets = () => call<MarketInfo[]>("/api/markets");
 export const getMarket = (symbol: string) => call<MarketView>(`/api/market?symbol=${symbol}`);
+
+// ---------- High Risk Mode
+export interface ScalpSide { side: Side; checks: Check[]; met: number; total: number; setup: (Pick<Signal, "id" | "symbol" | "side" | "entry" | "sl" | "tp" | "rr" | "candle_time" | "expires"> & { strategy: "scalp"; strategy_name: string }) | null }
+export interface ScalpView { symbol: string; price: number; candle_time: string; next_check: string; sides: ScalpSide[]; rules: { rr: number; hold_minutes: number; stop_atr: number } }
+export const getScalp = (symbol: string) => call<ScalpView>(`/api/scalp?symbol=${symbol}`);
+export const SCALP_STATS = { win_rate: 38, avg_r: -0.21, scalps: 4634, years: 3 };
+
+// ---------- Strategy Lab
+export type Rules = Record<string, unknown> & { name?: string; symbol: string; timeframe: string; long: Cond[]; short: Cond[]; stop: { type: string; [k: string]: unknown }; target: { type: string; value?: number }; max_hold_bars: number; assumptions?: { text: string; choice: string; alternatives?: string[] }[]; claimed?: { win_rate?: number | null; notes?: string } };
+export type Cond = Record<string, unknown> & { type: string; tf?: string };
+export interface LabReport { trades: number; per_week: number; win_rate?: number; avg_r?: number; avg_r_before_costs?: number; profit_factor?: number | null; longest_losing_streak?: number; target_hit_pct?: number; max_drawdown_r?: number;
+  by_year?: Record<string, { trades: number; avg_r: number; win_rate: number }>; early_vs_late?: { first_two_thirds_avg_r: number; last_third_avg_r: number | null }; equity_r?: number[];
+  account?: { start: number; risk_pct: number; end: number; blown: boolean }; last_trades?: { time: string; side: string; outcome: string; r: number }[]; flags: string[]; period: string[]; market: string; name: string; cost_pct: number }
+export const labParse = (text: string) => call<{ rules: Rules }>("/api/lab/parse", { method: "POST", body: JSON.stringify({ text }) }, 120000);
+export const labRun = (rules: Rules, balance: number, risk_pct: number) => call<LabReport>("/api/lab/run", { method: "POST", body: JSON.stringify({ rules, balance, risk_pct }) }, 180000);
+
+// ---------- Prop Mode
+export interface PropPreset { id: string; name: string; size: number; currency: string; fee: number; target: number; daily: number; dailyFunded: number; maxLoss: number; phases: number; inactivityDays: number; payoutPct: number; splits: number[] }
+export const PROP_PRESETS: PropPreset[] = [
+  { id: "ec-1.5m", name: "Express Classic ₦1.5M", size: 1500000, currency: "₦", fee: 4999, target: 10, daily: 4, dailyFunded: 3, maxLoss: 6, phases: 2, inactivityDays: 18, payoutPct: 10, splits: [50, 50, 50, 50, 70, 80, 95] },
+  { id: "ec-600k", name: "Express Classic ₦600K", size: 600000, currency: "₦", fee: 2999, target: 10, daily: 4, dailyFunded: 3, maxLoss: 6, phases: 2, inactivityDays: 18, payoutPct: 10, splits: [50, 50, 50, 50, 70, 80, 95] },
+];
+export interface PropState { presetId: string; phase: 1 | 2 | 3; balance: number; dayStart: number; payouts: number; lastTradeDate?: string; custom?: PropPreset }
+export function propPreset(st: PropState): PropPreset { return st.custom && st.presetId === "custom" ? st.custom : (PROP_PRESETS.find(p => p.id === st.presetId) || PROP_PRESETS[0]); }
+export function propNumbers(st: PropState) {
+  const p = propPreset(st); const funded = st.phase === 3;
+  const floor = p.size * (1 - p.maxLoss / 100);
+  const dailyLimit = st.dayStart * (funded ? p.dailyFunded : p.daily) / 100;
+  const dailyFloor = st.dayStart - dailyLimit;
+  const roomToday = Math.max(0, st.balance - dailyFloor), roomTotal = Math.max(0, st.balance - floor);
+  const riskPct = funded ? 0.75 : 1.0;                       // from the prop replays
+  const risk = p.size * riskPct / 100;
+  const targetBal = p.size * (1 + p.target / 100);
+  const progress = funded ? Math.max(0, (st.balance - p.size) / (p.size * p.payoutPct / 100)) : Math.max(0, (st.balance - p.size) / (p.size * p.target / 100));
+  const nextSplit = p.splits[Math.min(st.payouts, p.splits.length - 1)];
+  return { p, funded, floor, dailyLimit, dailyFloor, roomToday, roomTotal, riskPct, risk, targetBal, progress,
+    tradesLeftToday: Math.floor(roomToday / risk), tradesLeftTotal: Math.floor(roomTotal / risk),
+    payoutGross: p.size * p.payoutPct / 100, payoutNet: p.size * p.payoutPct / 100 * nextSplit / 100, nextSplit,
+    breached: st.balance <= floor || st.balance <= dailyFloor };
+}
+export const PROP_ODDS = [
+  { plan: "Squeeze, 1% challenge / 0.75% funded", pass: 24, days: 76, perAttempt: 15300 },
+  { plan: "Squeeze, 0.75% / 0.75%", pass: 21, days: 116, perAttempt: 13200 },
+  { plan: "Weekly Trend, 2% / 1%", pass: 28, days: 182, perAttempt: 2000 },
+];
+export function money(cur: string, x: number) { return `${x < 0 ? "−" : ""}${cur}${Math.abs(Math.round(x)).toLocaleString()}`; }

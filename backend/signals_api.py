@@ -39,6 +39,47 @@ def market_route():
         return jsonify({"error": f"Could not load {sym}: {str(e)[:160]}"}), 502
 
 
+@api.get("/scalp")
+def scalp_route():
+    import scalp as SC
+    sym = request.args.get("symbol", "BTCUSDT")
+    if sym not in SC.SCALP_MARKETS:
+        return jsonify({"error": f"High Risk Mode supports {', '.join(SC.SCALP_MARKETS)}"}), 400
+    try:
+        return jsonify(SC.live(sym, lambda s, tf, n: S.fetch_candles(s, tf, n)))
+    except Exception as e:
+        return jsonify({"error": f"Could not read {sym}: {str(e)[:160]}"}), 502
+
+
+@api.post("/lab/parse")
+def lab_parse_route():
+    import lab
+    from app import gemini_client, gemini_generate
+    text = ((request.get_json(silent=True) or {}).get("text") or "").strip()
+    if len(text) < 40:
+        return jsonify({"error": "Paste the full rule book (at least a few sentences)."}), 400
+    if gemini_client is None:
+        return jsonify({"error": "AI is not configured on the server."}), 503
+    try:
+        return jsonify({"rules": lab.parse(text, gemini_generate)})
+    except lab.RuleError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        return jsonify({"error": f"Could not translate the rule book: {str(e)[:160]}"}), 502
+
+
+@api.post("/lab/run")
+def lab_run_route():
+    import lab
+    body = request.get_json(silent=True) or {}
+    try:
+        return jsonify(lab.backtest(body.get("rules") or {}, float(body.get("balance", 25)), float(body.get("risk_pct", 2))))
+    except lab.RuleError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        return jsonify({"error": f"Backtest failed: {str(e)[:200]}"}), 502
+
+
 @api.get("/strategies")
 def strategies_route():
     return jsonify(S.STATS)

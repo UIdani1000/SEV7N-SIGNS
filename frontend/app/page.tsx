@@ -7,9 +7,16 @@ import Paper from "@/components/signs/Paper";
 import Ask from "@/components/signs/Ask";
 import Settings from "@/components/signs/Settings";
 import Markets from "@/components/signs/Markets";
-import { DEFAULTS, ScanResult, Signal, Store, Weekly, getWeekly, load, plan, runScan, save, usd } from "@/lib/signs";
+import Prop from "@/components/signs/Prop";
+import Lab from "@/components/signs/Lab";
+import HighRisk from "@/components/signs/HighRisk";
+import Account from "@/components/signs/Account";
+import Tools, { ToolView } from "@/components/signs/Tools";
+import type { User } from "firebase/auth";
+import { listen, merge, pull, push, watchUser } from "@/lib/sync";
+import { DEFAULTS, ScanResult, Signal, Store, Weekly, getWeekly, load, plan, runScan, save, stamp, usd } from "@/lib/signs";
 
-type View = "deck" | "markets" | "shorts" | "paper" | "ask";
+type View = "deck" | "markets" | "paper" | "ask" | ToolView;
 const SWEEP_LONG = ["Reading 20 markets", "Checking daily trends", "Looking for 4h squeezes", "Checking 1h pullbacks", "Ranking this week’s trend"];
 const SWEEP_SHORT = ["Reading 20 markets", "Finding daily downtrends", "Checking 4h momentum", "Waiting for 1h rejections"];
 
@@ -38,8 +45,22 @@ export default function Home() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const longScan = useScan("long"), shortScan = useScan("short");
 
-  useEffect(() => { setStoreState(load()); }, []);
-  const setStore = (s: Store) => { setStoreState(s); save(s); };
+  const [tools, setTools] = useState(false);
+  const [user, setUser] = useState<User | null>(null); const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const storeRef = useRef<Store>(DEFAULTS); const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { const s = load(); storeRef.current = s; setStoreState(s); }, []);
+  const apply = useCallback((s: Store) => { storeRef.current = s; setStoreState(s); save(s); }, []);
+  const setStore = (s0: Store) => {
+    const s = stamp(s0); apply(s);
+    if (user) { if (pushTimer.current) clearTimeout(pushTimer.current); pushTimer.current = setTimeout(() => push(user.uid, s).then(() => setSyncedAt(Date.now())).catch(() => {}), 1200); }
+  };
+  useEffect(() => watchUser(async u => {
+    setUser(u); if (!u) return;
+    try { const merged = merge(storeRef.current, await pull(u.uid)); apply(merged); await push(u.uid, merged); setSyncedAt(Date.now()); } catch { /* shown in Sync */ }
+  }), [apply]);
+  useEffect(() => { if (!user) return; return listen(user.uid, remote => {
+    if ((remote.updatedAt || 0) > (storeRef.current.updatedAt || 0)) { apply(merge(storeRef.current, remote)); setSyncedAt(Date.now()); }
+  }); }, [user, apply]);
   const toast = useCallback((m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(null), 3200); }, []);
   const loadWeekly = useCallback(() => {
     setWErr(null); setSlow(false); const t = setTimeout(() => setSlow(true), 6000);
@@ -61,7 +82,10 @@ export default function Home() {
     <main className="min-h-dvh">
       <header className="max-w-6xl mx-auto px-5 pt-5 md:pt-20 flex items-center justify-between">
         <div className="flex items-center gap-3"><Mark size={30} /><span className="wordmark">SEV7N SIGNS</span></div>
-        <button className="pill num !py-2 !px-3" onClick={() => setSettings(true)} aria-label="Edit balance and risk">{usd(store.balance)} at {store.riskPct}% risk</button>
+        <div className="flex items-center gap-2">
+          {user && <span className="text-xs muted hidden sm:inline">Synced</span>}
+          <button className="pill num !py-2 !px-3" onClick={() => setSettings(true)} aria-label="Edit balance and risk">{usd(store.balance)} at {store.riskPct}% risk</button>
+        </div>
       </header>
 
       {view === "deck" && <div className="max-w-6xl mx-auto px-5 pb-32 grid lg:grid-cols-[1.25fr_1fr] gap-10 lg:gap-14 mt-6">
@@ -122,16 +146,22 @@ export default function Home() {
 
       {view === "markets" && <Markets pair={store.pair || "BTCUSDT"} setPair={p => setStore({ ...store, pair: p })} onOpen={setOpen} />}
       {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} />}
+      {view === "prop" && <Prop store={store} setStore={setStore} toast={toast} />}
+      {view === "lab" && <Lab store={store} />}
+      {view === "highrisk" && <HighRisk store={store} setStore={setStore} toast={toast} />}
+      {view === "sync" && <Account user={user} syncedAt={syncedAt} toast={toast} />}
       {view === "ask" && <Ask />}
 
       <nav className="dock" aria-label="Main">
-        {(["deck", "markets", "shorts", "paper", "ask"] as View[]).map(v => (
-          <button key={v} aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>{{ deck: "Deck", markets: "Markets", shorts: "Shorts", paper: "Paper", ask: "Ask AI" }[v]}</button>
+        {(["deck", "markets", "paper", "ask"] as View[]).map(v => (
+          <button key={v} aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>{({ deck: "Deck", markets: "Markets", paper: "Paper", ask: "Ask AI" } as Record<string, string>)[v]}</button>
         ))}
+        <button aria-current={["shorts", "prop", "lab", "highrisk", "sync"].includes(view) ? "page" : undefined} onClick={() => setTools(true)}>Tools</button>
       </nav>
 
       {open && <SignalSheet sig={open} balance={store.balance} riskPct={store.riskPct} onClose={() => setOpen(null)} onPaper={paperTrade}
         onRisk={r => r !== store.riskPct && setStore({ ...store, riskPct: r })} />}
+      {tools && <Tools onClose={() => setTools(false)} onPick={v => { setTools(false); if (v === "settings") setSettings(true); else setView(v); }} />}
       {settings && <Settings store={store} setStore={setStore} onClose={() => setSettings(false)} toast={toast} />}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </main>

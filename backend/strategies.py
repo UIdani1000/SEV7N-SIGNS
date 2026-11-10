@@ -46,9 +46,9 @@ STATS = {
                  "max_risk_hint": 2},
 }
 
-TF_SECONDS = {"1h": 3600, "4h": 14400, "1d": 86400}
-_BYBIT_TF = {"1h": "60", "4h": "240", "1d": "D"}
-_BINANCE_TF = {"1h": "1h", "4h": "4h", "1d": "1d"}
+TF_SECONDS = {"5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+_BYBIT_TF = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
+_BINANCE_TF = {"5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
 _cache, _cache_lock = {}, threading.Lock()
 CACHE_SECONDS = 60
 HTTP = requests.Session()
@@ -316,6 +316,8 @@ def pullback_eval(symbol, h1, h4, d1, side):
 def scan(side="all"):
     started = time.time()
     jobs = [(s, tf, n) for s in UNIVERSE for tf, n in (("1h", 200), ("4h", 200), ("1d", 300))]
+    if side in ("all", "long"):
+        jobs += [("GOLD", "4h", 200), ("GOLD", "1d", 300)]
     got = _fetch_many(jobs)
     signals, near, errors = [], [], []
     for s in UNIVERSE:
@@ -337,6 +339,15 @@ def scan(side="all"):
                 if nr: near.append(nr)
         except Exception as e:
             errors.append({"symbol": s, "error": f"{type(e).__name__}: {e}"})
+    if side in ("all", "long"):
+        g4, gd = got.get(("GOLD", "4h")), got.get(("GOLD", "1d"))
+        if g4 is not None and not isinstance(g4, Exception) and not isinstance(gd, Exception):
+            try:
+                sig, nr, _ = squeeze_eval("GOLD", g4, gd)
+                if sig: sig["stats"] = dict(STATS["squeeze"], note=TEST_NOTES[("squeeze", "GOLD")]); signals.append(sig)
+                if nr: near.append(nr)
+            except Exception as e:
+                errors.append({"symbol": "GOLD", "error": str(e)})
     near.sort(key=lambda n: -n["met"] / n["total"])
     weekly = None
     if side in ("all", "long"):
@@ -357,8 +368,9 @@ def trade_status(trade):
     opened = pd.Timestamp(trade["opened_at"]); opened = opened.tz_convert("UTC") if opened.tzinfo else opened.tz_localize("UTC")
     expires = pd.Timestamp(trade.get("expires") or (opened + pd.Timedelta(days=7)))
     expires = expires.tz_convert("UTC") if expires.tzinfo else expires.tz_localize("UTC")
-    df = fetch_candles(sym, "1h", 300, include_live=True)
-    df = df[df.index >= opened.floor("h")]
+    scalp = trade.get("strategy") == "scalp"
+    df = fetch_candles(sym, "5m" if scalp else "1h", 300, include_live=True)
+    df = df[df.index >= (opened.floor("5min") if scalp else opened.floor("h"))]
     risk = abs(entry - sl)
     for t, row in df.iterrows():
         if t > expires: break
@@ -375,6 +387,10 @@ def trade_status(trade):
 
 # ---------------------------------------------------------------- single market view
 MARKETS = UNIVERSE + ["GOLD"]
+TEST_NOTES = {
+    ("squeeze", "GOLD"): "Tested on gold since 2020: buy setups averaged +0.40R per trade, but only about 40 trades. Treat with care.",
+    ("pullback", "GOLD"): "Tested on gold since 2020: it lost money (-0.15R per trade). Shown for reference only.",
+}
 
 
 def market(symbol):
@@ -390,8 +406,10 @@ def market(symbol):
     views = []
     for fn, args in ((squeeze_eval, (symbol, h4, d1)), (pullback_eval, (symbol, h1, h4, d1, "long")), (pullback_eval, (symbol, h1, h4, d1, "short"))):
         sig, _, detail = fn(*args)
-        detail["signal"] = sig
-        detail["tested_here"] = tested
+        note = TEST_NOTES.get((detail["strategy"], symbol))
+        detail["signal"] = sig if (tested or detail["strategy"] == "squeeze") else None
+        detail["tested_here"] = tested or detail["strategy"] == "squeeze"
+        detail["note"] = note
         views.append(detail)
     weekly = None
     if symbol in MAJORS:
