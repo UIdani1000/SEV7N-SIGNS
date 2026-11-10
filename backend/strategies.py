@@ -409,9 +409,15 @@ def trade_status(trade):
     opened = pd.Timestamp(trade["opened_at"]); opened = opened.tz_convert("UTC") if opened.tzinfo else opened.tz_localize("UTC")
     expires = pd.Timestamp(trade.get("expires") or (opened + pd.Timedelta(days=7)))
     expires = expires.tz_convert("UTC") if expires.tzinfo else expires.tz_localize("UTC")
-    scalp = trade.get("strategy") == "scalp"
-    df = fetch_candles(sym, "5m" if scalp else "1h", 300, include_live=True)
-    df = df[df.index >= (opened.floor("5min") if scalp else opened.floor("h"))]
+    # Only candles that START after the trade opened: the candle it opened in also holds earlier prices,
+    # which would falsely trigger the stop or target. Recent trades use 5m candles for precision.
+    age = pd.Timestamp(_now()) - opened
+    if trade.get("strategy") == "scalp" or age <= pd.Timedelta(days=3.3):
+        df = fetch_candles(sym, "5m", 1000, include_live=True)
+        df = df[df.index >= opened.ceil("5min")]
+    else:
+        df = fetch_candles(sym, "1h", 300, include_live=True)
+        df = df[df.index >= opened.ceil("h")]
     risk = abs(entry - sl)
     for t, row in df.iterrows():
         if t > expires: break

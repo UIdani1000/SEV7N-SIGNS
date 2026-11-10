@@ -129,3 +129,12 @@ def test_live_prices(monkeypatch, client):
     assert set(d["prices"]) == {"BTCUSDT", "GOLD"} and d["prices"]["GOLD"]["price"] == 4000.0   # gold fell back to PAXG
     n = len(calls); client.get("/api/prices?symbols=BTCUSDT"); assert len(calls) == n           # served from the 5s cache
     assert client.get("/api/prices?symbols=NOPE").status_code == 400
+
+def test_trade_status_ignores_prices_before_open(monkeypatch):
+    # the 16:00 candle dipped to 95 BEFORE the trade opened at 16:07; it must not count as a stop
+    idx = pd.date_range("2026-03-02 16:00", periods=4, freq="5min", tz="UTC")
+    df = pd.DataFrame({"open": [100]*4, "high": [100.5]*4, "low": [95, 99.5, 99.6, 99.7], "close": [100]*4, "volume": 1.0}, index=idx)
+    monkeypatch.setattr(S, "fetch_candles", lambda *a, **k: df)
+    monkeypatch.setattr(S, "_now", lambda: pd.Timestamp("2026-03-02 16:20", tz="UTC").to_pydatetime())
+    st = S.trade_status({"symbol": "BTCUSDT", "side": "long", "entry": 100, "sl": 98, "tp": 106, "opened_at": "2026-03-02T16:07:00Z"})
+    assert st["status"] == "open"

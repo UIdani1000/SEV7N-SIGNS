@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PaperTrade, Store, tradeStatus, fmtPrice, usd, STATS_LABEL } from "@/lib/signs";
 import { Ladder, LiveTag } from "./parts";
 import { usePrices } from "@/lib/usePrices";
@@ -30,17 +30,37 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
   useEffect(() => { refresh(); const id = setInterval(refresh, 60000); return () => clearInterval(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const live = usePrices(open.map(t => t.symbol));
-  const liveR = (t: PaperTrade) => { const px = live.prices[t.symbol]?.price; if (px == null) return t.result?.r ?? null; const r = (px - t.entry) / Math.abs(t.entry - t.sl) * (t.side === "long" ? 1 : -1); return Math.round(r * 100) / 100; };
+  const rawR = (t: PaperTrade) => { const px = live.prices[t.symbol]?.price; if (px == null) return t.result?.r ?? null; return (px - t.entry) / Math.abs(t.entry - t.sl) * (t.side === "long" ? 1 : -1); };
+  // An open trade can't lose more than its stop or gain more than its target: that's where it closes.
+  const liveR = (t: PaperTrade) => { const r = rawR(t); return r == null ? null : Math.round(Math.min(t.rr || 3, Math.max(-1, r)) * 100) / 100; };
   const pnl = closed.reduce((a, t) => a + (t.result?.r ?? 0) * t.risk_usd, 0);
+  const openPnl = open.reduce((a, t) => a + (liveR(t) ?? 0) * t.risk_usd, 0);
+  const equity = store.startBalance + pnl + openPnl, total = pnl + openPnl;
+  const lastCheck = useRef(0);
+  useEffect(() => {   // a live price crossed a stop or target: confirm the close right away instead of waiting a minute
+    const crossed = open.some(t => { const r = rawR(t); return r != null && (r <= -1 || r >= (t.rr || 3)); });
+    if (crossed && Date.now() - lastCheck.current > 15000) { lastCheck.current = Date.now(); refresh(); }
+  }, [live.at]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sign = (x: number) => (x >= 0 ? "+" : "−") + usd(Math.abs(x));
+  const tone = (x: number) => ({ color: x > 0 ? "var(--violet)" : x < 0 ? "var(--rust)" : undefined });
   const byStrat = Object.entries(closed.reduce((acc: Record<string, PaperTrade[]>, t) => { (acc[t.strategy] ||= []).push(t); return acc; }, {}));
   return (
     <section className="max-w-3xl mx-auto px-5 pt-6 pb-32">
       <h1 className="display text-7xl">Paper</h1>
       <p className="muted mt-2 max-w-prose">Practice with fake money. Each trade is checked against real prices until it hits its target, its stop, or its time limit.</p>
-      <div className="grid grid-cols-3 gap-4 mt-6 num">
-        <div><div className="text-sm muted">Paper balance</div><div className="display text-4xl">{usd(store.startBalance + pnl)}</div></div>
-        <div><div className="text-sm muted">Closed trades</div><div className="display text-4xl">{closed.length}</div></div>
-        <div><div className="text-sm muted">Wins</div><div className="display text-4xl">{closed.length ? Math.round(closed.filter(t => (t.result?.r ?? 0) > 0).length / closed.length * 100) : 0}%</div></div>
+      <div className="mt-6 num">
+        <div className="text-sm muted">Paper balance{open.length > 0 ? ", including open trades" : ""}</div>
+        <div className="display text-[18vw] sm:text-8xl leading-none tick" style={tone(total)}>{usd(equity)}</div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
+          <span className="font-semibold" style={tone(total)}>{sign(total)} ({total >= 0 ? "+" : ""}{(total / Math.max(store.startBalance, 1) * 100).toFixed(1)}%) since {usd(store.startBalance)}</span>
+          {open.length > 0 && <LiveTag at={live.at} stale={live.stale} />}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 num">
+        <div><div className="text-sm muted">Open P&amp;L</div><div className="display text-4xl tick" style={tone(openPnl)}>{sign(openPnl)}</div><div className="text-xs muted">{open.length} open</div></div>
+        <div><div className="text-sm muted">Closed P&amp;L</div><div className="display text-4xl" style={tone(pnl)}>{sign(pnl)}</div><div className="text-xs muted">{closed.length} closed</div></div>
+        <div><div className="text-sm muted">Wins</div><div className="display text-4xl">{closed.length ? Math.round(closed.filter(t => (t.result?.r ?? 0) > 0).length / closed.length * 100) : 0}%</div><div className="text-xs muted">of closed trades</div></div>
+        <div><div className="text-sm muted">Average</div><div className="display text-4xl" style={tone(closed.length ? closed.reduce((a, t) => a + (t.result?.r ?? 0), 0) : 0)}>{closed.length ? `${(closed.reduce((a, t) => a + (t.result?.r ?? 0), 0) / closed.length).toFixed(2)}R` : "–"}</div><div className="text-xs muted">per closed trade</div></div>
       </div>
 
       {byStrat.length > 0 && <div className="mt-8">
@@ -65,7 +85,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
             <span className={`pill ${t.side === "long" ? "pill-long" : "pill-short"}`}>{t.side === "long" ? "Buy" : "Sell"}</span>
             <div className="display text-4xl mt-2">{t.ticker}</div>
             <div className="text-sm muted">{t.strategy_name}, risking {usd(t.risk_usd)}</div>
-            {liveR(t) != null && <div className="num font-semibold mt-2 tick" style={{ color: liveR(t)! >= 0 ? "var(--violet)" : "var(--rust)" }}>{liveR(t)! >= 0 ? "+" : ""}{liveR(t)!.toFixed(2)}R now</div>}
+            {liveR(t) != null && <div className="num font-semibold mt-2 tick" style={tone(liveR(t)!)}>{sign(liveR(t)! * t.risk_usd)} now <span className="text-sm">({liveR(t)! >= 0 ? "+" : ""}{liveR(t)!.toFixed(2)}R)</span></div>}
           </div>
           <Ladder sig={t} price={live.prices[t.symbol]?.price ?? t.result?.price ?? null} height={130} />
         </div>
