@@ -250,18 +250,20 @@ def squeeze_eval(symbol, h4, d1):
               {"label": "Closed above the upper Bollinger band", "ok": bool(last["close"] > last["BBU_20_2.0"])}]
     met = sum(x["ok"] for x in checks)
     t = h.index[-1]
+    detail = {"strategy": "squeeze", "strategy_name": STATS["squeeze"]["name"], "side": "long", "checks": checks, "met": met, "total": 4,
+              "watch": f"Needs a 4h close above {_round(last['BBU_20_2.0'], last['close'])} after a 3+ candle squeeze, in a daily uptrend"}
     if met == 4:
         entry = float(last["close"])
         return _signal("squeeze", symbol, "long", entry, entry - 1.5 * float(last["ATR_14"]), t,
                        t + pd.Timedelta(hours=4) + pd.Timedelta(days=7),
                        ["Daily trend is up", f"Price was coiled for {run} candles on the 4h chart",
-                        "The squeeze released with a close above the upper band"]), None
+                        "The squeeze released with a close above the upper band"]), None, detail
     near = None
     if checks[0]["ok"] and (sq[-1] or run >= 3):
         near = {"strategy": "squeeze", "strategy_name": STATS["squeeze"]["name"], "symbol": symbol, "ticker": TICKERS[symbol],
                 "name": NAMES[symbol], "side": "long", "checks": checks, "met": met, "total": 4,
                 "watch": f"Waiting for a 4h close above {_round(last['BBU_20_2.0'], last['close'])}"}
-    return None, near
+    return None, near, detail
 
 
 # ---------------------------------------------------------------- S1 Trend Pullback (long + short)
@@ -291,6 +293,9 @@ def pullback_eval(symbol, h1, h4, d1, side):
               {"label": f"1h MACD crossed {word}", "ok": macd_ok}]
     met = sum(x["ok"] for x in checks)
     t = m.index[-1]
+    missing = [c["label"].lower() for c in checks if not c["ok"]]
+    detail = {"strategy": "pullback", "strategy_name": STATS["pullback"]["name"], "side": side, "checks": checks, "met": met, "total": 5,
+              "watch": ("Missing: " + ", ".join(missing)) if missing else "All conditions met"}
     if met == 5:
         entry, atr = float(last["close"]), float(last["ATR_14"])
         if up:
@@ -298,13 +303,13 @@ def pullback_eval(symbol, h1, h4, d1, side):
         else:
             sl = max(float(m["high"].iloc[-24:].max()) + 0.1 * atr, entry + atr)
         return _signal("pullback", symbol, side, entry, sl, t, t + pd.Timedelta(hours=1) + pd.Timedelta(days=7),
-                       [c["label"] for c in checks]), None
+                       [c["label"] for c in checks]), None, detail
     near = None
     if trend_ok and met >= 3:
         near = {"strategy": "pullback", "strategy_name": STATS["pullback"]["name"], "symbol": symbol, "ticker": TICKERS[symbol],
                 "name": NAMES[symbol], "side": side, "checks": checks, "met": met, "total": 5,
                 "watch": "Missing: " + ", ".join(c["label"].lower() for c in checks if not c["ok"])}
-    return None, near
+    return None, near, detail
 
 
 # ---------------------------------------------------------------- full scan
@@ -320,14 +325,14 @@ def scan(side="all"):
             errors.append({"symbol": s, "error": str(bad[0])}); continue
         try:
             if side in ("all", "long"):
-                sig, nr = squeeze_eval(s, h4, d1)
+                sig, nr, _ = squeeze_eval(s, h4, d1)
                 if sig: signals.append(sig)
                 if nr: near.append(nr)
-                sig, nr = pullback_eval(s, h1, h4, d1, "long")
+                sig, nr, _ = pullback_eval(s, h1, h4, d1, "long")
                 if sig: signals.append(sig)
                 if nr: near.append(nr)
             if side in ("all", "short"):
-                sig, nr = pullback_eval(s, h1, h4, d1, "short")
+                sig, nr, _ = pullback_eval(s, h1, h4, d1, "short")
                 if sig: signals.append(sig)
                 if nr: near.append(nr)
         except Exception as e:
@@ -366,3 +371,39 @@ def trade_status(trade):
     if pd.Timestamp(_now()) >= expires:
         return {"id": trade.get("id"), "status": "expired", "exit": price, "r": round(r_now, 2), "closed_at": expires.isoformat()}
     return {"id": trade.get("id"), "status": "open", "price": price, "r": round(r_now, 2)}
+
+
+# ---------------------------------------------------------------- single market view
+MARKETS = UNIVERSE + ["GOLD"]
+
+
+def market(symbol):
+    """Every strategy's checklist for one market, whether or not it is close to a setup."""
+    if symbol not in MARKETS:
+        raise ValueError("unknown market")
+    got = _fetch_many([(symbol, "1h", 200), (symbol, "4h", 200), (symbol, "1d", 300)])
+    h1, h4, d1 = got[(symbol, "1h")], got[(symbol, "4h")], got[(symbol, "1d")]
+    for x in (h1, h4, d1):
+        if isinstance(x, Exception):
+            raise RuntimeError(str(x))
+    tested = symbol in UNIVERSE
+    views = []
+    for fn, args in ((squeeze_eval, (symbol, h4, d1)), (pullback_eval, (symbol, h1, h4, d1, "long")), (pullback_eval, (symbol, h1, h4, d1, "short"))):
+        sig, _, detail = fn(*args)
+        detail["signal"] = sig
+        detail["tested_here"] = tested
+        views.append(detail)
+    weekly = None
+    if symbol in MAJORS:
+        w = weekly_scan()
+        row = next((b for b in w["leaderboard"] if b["symbol"] == symbol), None)
+        is_pick = bool(w["pick"] and w["pick"]["symbol"] == symbol)
+        weekly = {"is_pick": is_pick, "pick": w["pick"] if is_pick else None, "row": row,
+                  "rank": [b["symbol"] for b in w["leaderboard"]].index(symbol) + 1 if row else None,
+                  "pick_ticker": w["pick"]["ticker"] if w["pick"] else None, "next_scan": w["next_scan"]}
+    price = float(fetch_candles(symbol, "1h", 3, include_live=True)["close"].iloc[-1])
+    d = d1.copy(); ind.add_ema(d, 21); ind.add_ema(d, 50)
+    trend = "up" if d["EMA_21"].iloc[-1] > d["EMA_50"].iloc[-1] else "down"
+    chg = (price / float(d["close"].iloc[-2]) - 1) * 100 if len(d) > 1 else 0.0
+    return {"symbol": symbol, "ticker": TICKERS[symbol], "name": NAMES[symbol], "price": price, "change_24h_pct": round(chg, 2),
+            "daily_trend": trend, "strategies": views, "weekly": weekly, "tested": tested, "generated_at": _now().isoformat()}

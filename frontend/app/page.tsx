@@ -6,9 +6,10 @@ import SignalSheet from "@/components/signs/SignalSheet";
 import Paper from "@/components/signs/Paper";
 import Ask from "@/components/signs/Ask";
 import Settings from "@/components/signs/Settings";
+import Markets from "@/components/signs/Markets";
 import { DEFAULTS, ScanResult, Signal, Store, Weekly, getWeekly, load, plan, runScan, save, usd } from "@/lib/signs";
 
-type View = "deck" | "shorts" | "paper" | "ask";
+type View = "deck" | "markets" | "shorts" | "paper" | "ask";
 const SWEEP_LONG = ["Reading 20 markets", "Checking daily trends", "Looking for 4h squeezes", "Checking 1h pullbacks", "Ranking this week’s trend"];
 const SWEEP_SHORT = ["Reading 20 markets", "Finding daily downtrends", "Checking 4h momentum", "Waiting for 1h rejections"];
 
@@ -119,12 +120,13 @@ export default function Home() {
         <div className="mt-6"><ScanBlock scan={shortScan} title="Scan for short entries" sub="Looks for daily downtrends with a fresh 1h rejection." onOpen={setOpen} /></div>
       </div>}
 
+      {view === "markets" && <Markets pair={store.pair || "BTCUSDT"} setPair={p => setStore({ ...store, pair: p })} onOpen={setOpen} />}
       {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} />}
       {view === "ask" && <Ask />}
 
       <nav className="dock" aria-label="Main">
-        {(["deck", "shorts", "paper", "ask"] as View[]).map(v => (
-          <button key={v} aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>{{ deck: "Deck", shorts: "Shorts", paper: "Paper", ask: "Ask AI" }[v]}</button>
+        {(["deck", "markets", "shorts", "paper", "ask"] as View[]).map(v => (
+          <button key={v} aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>{{ deck: "Deck", markets: "Markets", shorts: "Shorts", paper: "Paper", ask: "Ask AI" }[v]}</button>
         ))}
       </nav>
 

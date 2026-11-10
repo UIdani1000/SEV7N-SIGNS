@@ -68,7 +68,7 @@ body { font-family: var(--font-body), system-ui, sans-serif; -webkit-font-smooth
 /* dock: bottom on phones, floating top pill on desktop */
 .dock { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(.8rem + env(safe-area-inset-bottom));
   display: flex; gap: .25rem; background: var(--ink); color: var(--paper); padding: .35rem; border-radius: 999px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
-.dock button { padding: .55rem 1rem; border-radius: 999px; font-size: .85rem; font-weight: 600; opacity: .7; }
+.dock button { padding: .55rem .78rem; border-radius: 999px; font-size: .85rem; font-weight: 600; opacity: .7; }
 .dock button[aria-current="page"] { background: var(--paper); color: var(--ink); opacity: 1; }
 @media (min-width: 900px) { .dock { bottom: auto; top: 1rem; } }
 

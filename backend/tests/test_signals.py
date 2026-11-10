@@ -77,3 +77,13 @@ def test_api_routes(fake_market, client):
     r = client.post("/api/cron/scan"); assert r.status_code == 200
     assert "skipped" in client.post("/api/cron/scan").get_json()          # 10-minute cooldown
     assert client.post("/api/explain", json={"signal": {"id": "x"}}).status_code == 503  # no AI key in tests
+
+def test_market_view(fake_market, client):
+    assert len(client.get("/api/markets").get_json()) == len(S.MARKETS)
+    d = client.get("/api/market?symbol=ETHUSDT").get_json()
+    assert d["ticker"] == "ETH" and len(d["strategies"]) == 3 and d["weekly"] is not None
+    for v in d["strategies"]:
+        assert v["checks"] and 0 <= v["met"] <= v["total"] and "signal" in v
+    g = client.get("/api/market?symbol=GOLD").get_json()
+    assert g["tested"] is False and all(v["tested_here"] is False for v in g["strategies"])
+    assert client.get("/api/market?symbol=NOPE").status_code == 400

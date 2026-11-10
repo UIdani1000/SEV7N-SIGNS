@@ -27,8 +27,10 @@ export default function Settings({ store, setStore, onClose, toast }: { store: S
           {tg.error && <p style={{ color: "var(--rust)" }}>{tg.error}</p>}
           {tg.connected ? <><p>Connected. Alerts go to chat {tg.chat_id_set}.</p><button className="btn btn-ghost text-sm justify-self-start" onClick={test}>Send a test message</button></> : tg.bot && <ol className="grid gap-1.5 list-decimal pl-5">
             <li>Open <a className="underline" href={`https://t.me/${tg.bot}`} target="_blank" rel="noreferrer">t.me/{tg.bot}</a> and press Start.</li>
-            <li>Come back and tap <button className="underline" onClick={check}>check again</button> to see your chat ID{tg.recent_chats?.length ? <>: <b className="num">{tg.recent_chats.map(c => `${c.id} (${c.name})`).join(", ")}</b></> : "."}</li>
-            <li>In Render, add <b>TELEGRAM_CHAT_ID</b> with that number. Alerts start on the next hourly scan.</li>
+            <li>Come back and tap <button className="underline" onClick={check}>check again</button> to see your chat ID.
+              {tg.recent_chats?.map(c => <span key={c.id} className="flex items-center gap-2 mt-2"><b className="num text-base">{c.id}</b><span className="muted">from {c.name}</span>
+                <button className="pill !py-1" onClick={() => { navigator.clipboard?.writeText(String(c.id)); toast("Chat ID copied."); }}>Copy</button></span>)}</li>
+            <li>In Render, add <b>TELEGRAM_CHAT_ID</b> with just the number (no name or brackets). Alerts start on the next hourly scan.</li>
           </ol>}
         </div>}
 

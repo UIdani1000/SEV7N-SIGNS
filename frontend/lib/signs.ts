@@ -62,8 +62,19 @@ export function usd(x: number) { return `$${x.toFixed(x < 10 ? 2 : 0)}`; }
 
 // ---------- storage
 const KEY = "sev7n-signs-v1";
-export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number }
+export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number; pair?: string }
 export const DEFAULTS: Store = { balance: 25, riskPct: 6, paper: [], startBalance: 25 };
 export function load(): Store { try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); return s ? { ...DEFAULTS, ...s } : DEFAULTS; } catch { return DEFAULTS; } }
 export function save(s: Store) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage full or blocked */ } }
 export const STATS_LABEL = "Tested figures come from 2020–2026 backtests with fees and funding. A handful of paper trades will swing far from them; judge after 30+.";
+
+// ---------- markets
+export interface MarketInfo { symbol: string; ticker: string; name: string; major: boolean }
+export interface StrategyView { strategy: string; strategy_name: string; side: Side; checks: Check[]; met: number; total: number; watch: string; signal: Signal | null; tested_here: boolean }
+export interface MarketView {
+  symbol: string; ticker: string; name: string; price: number; change_24h_pct: number; daily_trend: "up" | "down"; tested: boolean;
+  strategies: StrategyView[]; generated_at: string;
+  weekly: { is_pick: boolean; pick: Signal | null; row: Board | null; rank: number | null; pick_ticker: string | null; next_scan: string } | null;
+}
+export const getMarkets = () => call<MarketInfo[]>("/api/markets");
+export const getMarket = (symbol: string) => call<MarketView>(`/api/market?symbol=${symbol}`);

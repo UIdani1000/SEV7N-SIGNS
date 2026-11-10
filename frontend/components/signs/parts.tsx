@@ -35,19 +35,20 @@ export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry"
   );
 }
 
-/** Small candle chart with the trade levels drawn across it. */
-export function MiniChart({ sig, tf }: { sig: Signal; tf: string }) {
+/** Candle chart; draws trade levels when a signal is given. */
+export function PriceChart({ symbol, tf, levels, label }: { symbol: string; tf: string; levels?: Pick<Signal, "entry" | "sl" | "tp"> | null; label: string }) {
   const [data, setData] = useState<{ t: number; o: number; h: number; l: number; c: number }[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { let on = true; getCandles(sig.symbol, tf).then(d => on && setData(d.candles)).catch(e => on && setErr(e.message)); return () => { on = false; }; }, [sig.symbol, tf]);
+  useEffect(() => { let on = true; setData(null); setErr(null); getCandles(symbol, tf).then(d => on && setData(d.candles)).catch(e => on && setErr(e.message)); return () => { on = false; }; }, [symbol, tf]);
   if (err) return <p className="muted text-sm">Chart unavailable: {err}</p>;
   if (!data) return <div className="h-[180px] rounded-xl" style={{ background: "var(--paper-2)" }} aria-busy="true" />;
   const W = 480, H = 180, pad = 4;
-  const lo = Math.min(...data.map(d => d.l), sig.sl, sig.tp), hi = Math.max(...data.map(d => d.h), sig.sl, sig.tp);
+  const extra = levels ? [levels.sl, levels.tp] : [];
+  const lo = Math.min(...data.map(d => d.l), ...extra), hi = Math.max(...data.map(d => d.h), ...extra);
   const y = (v: number) => pad + (hi - v) / (hi - lo || 1) * (H - 2 * pad);
-  const bw = (W - 60) / data.length;
+  const bw = (W - (levels ? 60 : 8)) / data.length;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={`${sig.ticker} ${tf} chart with trade levels`}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={label}>
       {data.map((d, i) => {
         const x = i * bw + bw / 2, up = d.c >= d.o;
         return (<g key={d.t}>
@@ -55,7 +56,7 @@ export function MiniChart({ sig, tf }: { sig: Signal; tf: string }) {
           <rect x={x - bw * .32} width={bw * .64} y={y(Math.max(d.o, d.c))} height={Math.max(1, Math.abs(y(d.o) - y(d.c)))} fill={up ? "var(--ink)" : "var(--paper)"} stroke="var(--ink)" strokeWidth={.8} />
         </g>);
       })}
-      {[["TP", sig.tp, "var(--violet)"], ["Entry", sig.entry, "var(--ink)"], ["SL", sig.sl, "var(--rust)"]].map(([k, v, c]) => (
+      {levels && [["TP", levels.tp, "var(--violet)"], ["Entry", levels.entry, "var(--ink)"], ["SL", levels.sl, "var(--rust)"]].map(([k, v, c]) => (
         <g key={k as string}>
           <line x1={0} x2={W - 56} y1={y(v as number)} y2={y(v as number)} stroke={c as string} strokeDasharray={k === "Entry" ? "0" : "5 4"} strokeWidth={1.5} />
           <text x={W - 52} y={y(v as number) + 4} fontSize="11" fontWeight="700" fill={c as string}>{k as string}</text>
@@ -63,6 +64,10 @@ export function MiniChart({ sig, tf }: { sig: Signal; tf: string }) {
       ))}
     </svg>
   );
+}
+
+export function MiniChart({ sig, tf }: { sig: Signal; tf: string }) {
+  return <PriceChart symbol={sig.symbol} tf={tf} levels={sig} label={`${sig.ticker} ${tf} chart with trade levels`} />;
 }
 
 export function SignalRow({ sig, onOpen }: { sig: Signal; onOpen: (s: Signal) => void }) {

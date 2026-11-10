@@ -23,6 +23,22 @@ def weekly_route():
     return jsonify(S.weekly_scan())
 
 
+@api.get("/markets")
+def markets_route():
+    return jsonify([{"symbol": m, "ticker": S.TICKERS[m], "name": S.NAMES[m], "major": m in S.MAJORS} for m in S.MARKETS])
+
+
+@api.get("/market")
+def market_route():
+    sym = request.args.get("symbol", "BTCUSDT")
+    if sym not in S.MARKETS:
+        return jsonify({"error": f"Unknown market {sym}"}), 400
+    try:
+        return jsonify(S.market(sym))
+    except Exception as e:
+        return jsonify({"error": f"Could not load {sym}: {str(e)[:160]}"}), 502
+
+
 @api.get("/strategies")
 def strategies_route():
     return jsonify(S.STATS)
