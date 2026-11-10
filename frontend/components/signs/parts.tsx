@@ -1,0 +1,97 @@
+"use client";
+import { useEffect, useState } from "react";
+import { Signal, Near, fmtPrice, getCandles } from "@/lib/signs";
+
+/** The price ladder: stop, entry and target as rungs, with the live price pinned between them. */
+export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry" | "sl" | "tp" | "side">; price?: number | null; height?: number }) {
+  const top = sig.side === "long" ? sig.tp : sig.sl, bottom = sig.side === "long" ? sig.sl : sig.tp;
+  const span = Math.abs(top - bottom) || 1;
+  const y = (v: number) => Math.min(100, Math.max(0, ((top - v) / span) * 100));
+  const rungs = [
+    { k: "Target", v: sig.tp, c: "var(--violet)" },
+    { k: "Entry", v: sig.entry, c: "var(--ink)" },
+    { k: "Stop", v: sig.sl, c: "var(--rust)" },
+  ];
+  const gainTop = Math.min(y(sig.tp), y(sig.entry)), gainH = Math.abs(y(sig.tp) - y(sig.entry));
+  const riskTop = Math.min(y(sig.sl), y(sig.entry)), riskH = Math.abs(y(sig.sl) - y(sig.entry));
+  return (
+    <div className="ladder num" style={{ height }} aria-label={`Stop ${fmtPrice(sig.sl)}, entry ${fmtPrice(sig.entry)}, target ${fmtPrice(sig.tp)}`}>
+      <div className="zone-gain" style={{ top: `${gainTop}%`, height: `${gainH}%`, left: -4 }} />
+      <div className="zone-risk" style={{ top: `${riskTop}%`, height: `${riskH}%`, left: -4 }} />
+      {rungs.map(r => (
+        <div key={r.k} className="rung" style={{ top: `${y(r.v)}%` }}>
+          <span className="dot" style={{ background: r.c }} />
+          <span className="tag" style={{ color: r.c }}>{r.k}</span>
+          <span className="lvl">{fmtPrice(r.v)}</span>
+        </div>
+      ))}
+      {price != null && isFinite(price) && (
+        <div className="price-pin" style={{ top: `${y(price)}%` }}><span>Now {fmtPrice(price)}</span></div>
+      )}
+    </div>
+  );
+}
+
+/** Small candle chart with the trade levels drawn across it. */
+export function MiniChart({ sig, tf }: { sig: Signal; tf: string }) {
+  const [data, setData] = useState<{ t: number; o: number; h: number; l: number; c: number }[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { let on = true; getCandles(sig.symbol, tf).then(d => on && setData(d.candles)).catch(e => on && setErr(e.message)); return () => { on = false; }; }, [sig.symbol, tf]);
+  if (err) return <p className="muted text-sm">Chart unavailable: {err}</p>;
+  if (!data) return <div className="h-[180px] rounded-xl" style={{ background: "var(--paper-2)" }} aria-busy="true" />;
+  const W = 480, H = 180, pad = 4;
+  const lo = Math.min(...data.map(d => d.l), sig.sl, sig.tp), hi = Math.max(...data.map(d => d.h), sig.sl, sig.tp);
+  const y = (v: number) => pad + (hi - v) / (hi - lo || 1) * (H - 2 * pad);
+  const bw = (W - 60) / data.length;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img" aria-label={`${sig.ticker} ${tf} chart with trade levels`}>
+      {data.map((d, i) => {
+        const x = i * bw + bw / 2, up = d.c >= d.o;
+        return (<g key={d.t}>
+          <line x1={x} x2={x} y1={y(d.h)} y2={y(d.l)} stroke="var(--stone)" strokeWidth={1} />
+          <rect x={x - bw * .32} width={bw * .64} y={y(Math.max(d.o, d.c))} height={Math.max(1, Math.abs(y(d.o) - y(d.c)))} fill={up ? "var(--ink)" : "var(--paper)"} stroke="var(--ink)" strokeWidth={.8} />
+        </g>);
+      })}
+      {[["TP", sig.tp, "var(--violet)"], ["Entry", sig.entry, "var(--ink)"], ["SL", sig.sl, "var(--rust)"]].map(([k, v, c]) => (
+        <g key={k as string}>
+          <line x1={0} x2={W - 56} y1={y(v as number)} y2={y(v as number)} stroke={c as string} strokeDasharray={k === "Entry" ? "0" : "5 4"} strokeWidth={1.5} />
+          <text x={W - 52} y={y(v as number) + 4} fontSize="11" fontWeight="700" fill={c as string}>{k as string}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+export function SignalRow({ sig, onOpen }: { sig: Signal; onOpen: (s: Signal) => void }) {
+  return (
+    <button className="row w-full text-left flex items-center gap-4 group" onClick={() => onOpen(sig)}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`pill ${sig.side === "long" ? "pill-long" : "pill-short"}`}>{sig.side === "long" ? "Buy" : "Sell"}</span>
+          <span className="text-xs muted">{sig.strategy_name}</span>
+        </div>
+        <div className="display text-4xl">{sig.ticker}</div>
+        <div className="text-sm muted num mt-1">Entry {fmtPrice(sig.entry)}, stop {fmtPrice(sig.sl)}, target {fmtPrice(sig.tp)}</div>
+      </div>
+      <span className="btn btn-ghost text-sm group-hover:border-[var(--ink)]">Plan it</span>
+    </button>
+  );
+}
+
+export function NearRow({ n }: { n: Near }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="row">
+      <button className="w-full text-left flex items-center gap-3" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+        <div className="flex-1">
+          <div className="flex items-baseline gap-2"><span className="display text-2xl">{n.ticker}</span><span className="text-xs muted">{n.strategy_name}, {n.side === "long" ? "buy" : "sell"}</span></div>
+          <div className="text-sm muted mt-1">{n.watch}</div>
+        </div>
+        <span className="num text-sm font-semibold" aria-label={`${n.met} of ${n.total} conditions met`}>{n.met}/{n.total}</span>
+      </button>
+      {open && <div className="mt-3 grid gap-2">{n.checks.map(c => (
+        <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>
+      ))}</div>}
+    </div>
+  );
+}

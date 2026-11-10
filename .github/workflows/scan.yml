@@ -1,0 +1,14 @@
+name: Hourly signal scan
+on:
+  schedule:
+    - cron: "5 * * * *"      # every hour at :05 UTC, just after candles close
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake the backend and run the scan (sends new signals to Telegram)
+        run: |
+          curl -s --max-time 120 https://aura-trading-bot-backend.onrender.com/ > /dev/null || true
+          curl -s --max-time 180 -X POST https://aura-trading-bot-backend.onrender.com/api/cron/scan

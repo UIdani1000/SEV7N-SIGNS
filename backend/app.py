@@ -1109,6 +1109,11 @@ def run_ormcr_analysis():
     return jsonify(ai_analysis_results)
 
 
+# --- SEV7N SIGNS API (/api/...) ---
+from signals_api import api as signals_blueprint
+app.register_blueprint(signals_blueprint)
+
+
 if __name__ == '__main__':
     # This block is primarily for local development.
     # For Render deployment, Gunicorn will handle starting the Flask application.

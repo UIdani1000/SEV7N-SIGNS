@@ -1,6 +1,6 @@
-# Aura Trading Bot
+# SEV7N SIGNS (formerly Aura Trading Bot)
 
-AI-assisted crypto market analysis dashboard. It reads public Bybit price data,
+Tested trading signals with honest numbers, powered by SEV7N FOLD. It reads public Bybit price data,
 computes technical indicators, produces rule-based (ORMCR) signals with stop-loss and
 take-profit levels, and uses Google Gemini to explain them in plain English.
 
@@ -39,3 +39,11 @@ cd frontend && pnpm install && pnpm dev
 ```
 
 A CI workflow (backend tests + frontend build) is ready at `.github/ci-workflow.yml`; move it to `.github/workflows/ci.yml` to enable it.
+
+## SEV7N SIGNS MVP (phase 1)
+
+- **Strategies:** Weekly Trend (core, majors incl. gold), Squeeze Breakout (longs), Trend Pullback (long + short scan).
+- **API:** `/api/weekly`, `/api/scan?side=all|long|short`, `/api/candles`, `/api/explain`, `/api/trades/status`,
+  `/api/telegram/status`, `/api/telegram/test`, `/api/cron/scan` (hourly via `.github/workflows/scan.yml`).
+- **Frontend:** Deck (weekly pick + scan), Shorts, Paper (paper trading + scorecard), Ask AI, Settings. Old dashboard at `/legacy`.
+- **Render env:** `GEMINI_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (from the in-app Telegram setup).
