@@ -5,7 +5,7 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from pybit.unified_trading import HTTP
 import pandas as pd
-import pandas_ta as ta
+import indicators as ind
 from datetime import datetime, timedelta
 import random
 import json
@@ -17,39 +17,55 @@ import traceback
 load_dotenv()
 
 app = Flask(__name__)
-# Configure CORS to allow requests from your Vercel frontend.
-# For now, allowing all origins is easiest for debugging.
-# For production, consider being more specific:
-# CORS(app, origins=["https://aura-trading-bot-frontend.vercel.app", "http://localhost:3000"])
-CORS(app)
 
-# --- Configuration ---
-BYBIT_API_KEY = os.environ.get('BYBIT_API_KEY')
-BYBIT_API_SECRET = os.environ.get('BYBIT_API_SECRET')
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+# --- CORS ---
+# Only the dashboard may call this API from a browser. Override with ALLOWED_ORIGINS
+# (comma-separated) if you add a custom domain.
+_default_origins = [
+    "https://aura-trading-dashboard-frontend.vercel.app",
+    r"https://aura-trading-dashboard-frontend-.*\.vercel\.app",  # Vercel preview/project URLs
+    "http://localhost:3000",
+]
+_env_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+CORS(app, origins=_env_origins or _default_origins)
 
-# Initialize Bybit client
-if BYBIT_API_KEY and BYBIT_API_SECRET:
-    bybit_client = HTTP(
-        api_key=BYBIT_API_KEY,
-        api_secret=BYBIT_API_SECRET,
-        testnet=False, # Set to True for testnet
-        timeout=30 # Increased timeout to 30 seconds
-    )
-    print("--- Bybit client initialized ---")
+# --- Bybit (public market data only) ---
+# This app only reads candles, which is public data, so no API key is needed.
+# Never put exchange keys in this service.
+bybit_client = HTTP(testnet=False, timeout=30)
+print("--- Bybit public market-data client initialized (no API key) ---")
+
+# --- Google Gemini ---
+# Set GEMINI_API_KEY in Render's environment settings. GEMINI_MODEL is optional.
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+gemini_client = None
+if GEMINI_API_KEY:
+    try:
+        from google import genai
+        from google.genai import types as genai_types
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        print(f"--- Gemini client initialized (model: {GEMINI_MODEL}) ---")
+    except Exception as e:
+        print(f"--- Failed to initialize Gemini client: {e} ---")
 else:
-    bybit_client = None
-    print("--- Bybit API keys not found. Bybit client not initialized. ---")
+    print("--- GEMINI_API_KEY not set: AI features disabled, signals still work ---")
 
-# Initialize Google Gemini
-try:
-    import google.generativeai as genai
-    genai.configure(api_key=GOOGLE_API_KEY)
-    gemini_model = genai.GenerativeModel('gemini-2.0-flash') # Using gemini-2.0-flash
-    print("--- Successfully initialized model to gemini-2.0-flash at startup ---")
-except Exception as e:
-    gemini_model = None
-    print(f"--- Failed to initialize Gemini model: {e} ---")
+
+def gemini_generate(contents, system_instruction=None, response_schema=None):
+    """Call Gemini and return the response text. Raises on any failure."""
+    if gemini_client is None:
+        raise RuntimeError("AI is not configured (GEMINI_API_KEY is not set on the server).")
+    config = genai_types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json" if response_schema else None,
+        response_schema=response_schema,
+    )
+    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=config)
+    if not response.text:
+        raise RuntimeError("Gemini returned an empty response.")
+    return response.text
+
 
 # --- Health Check / Root Route (ADDED FOR RENDER) ---
 # Render expects a successful response from the root route to consider the service "live".
@@ -130,10 +146,10 @@ def get_all_market_prices():
                 percent_change = ((last_close - prev_close) / prev_close) * 100 if prev_close != 0 else 0
 
                 # --- Apply Indicators for Dashboard ---
-                df.ta.rsi(append=True) # Adds 'RSI_14'
-                df.ta.macd(append=True) # Adds 'MACD_12_26_9', 'MACDh_12_26_9', and 'MACDs_12_26_9' (based on your logs)
-                df.ta.stoch(append=True) # Adds 'STOCHk_14_3_3', 'STOCHd_14_3_3'
-                df.ta.atr(append=True) # Adds 'ATR_14', 'ATRr_14'
+                ind.add_rsi(df)    # RSI_14
+                ind.add_macd(df)   # MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
+                ind.add_stoch(df)  # STOCHk_14_3_3, STOCHd_14_3_3
+                ind.add_atr(df)    # ATR_14 (and ATRr_14)
 
                 # --- NEW DEBUG PRINT: List all columns after pandas_ta ---
                 print(f"\n--- DEBUG: Dashboard {symbol} ALL COLUMNS after pandas_ta: ---")
@@ -240,94 +256,51 @@ def get_all_market_prices():
 
     return jsonify(market_data)
 
-# --- Chat Endpoint (Existing) ---
+# --- Chat Endpoint ---
 @app.route('/chat', methods=['POST'])
 def chat():
-    if not gemini_model:
-        return jsonify({"error": "Gemini model not initialized"}), 500
+    if gemini_client is None:
+        return jsonify({"error": "AI chat is not configured on the server (GEMINI_API_KEY missing)."}), 503
 
-    user_message_data = request.json.get('message')
-    # The frontend is expected to send the entire chat history in `message` under a `parts` key
-    # For now, we assume user_message_data is the full history if it's a list, otherwise just the last message
-    
-    # Original logic was expecting a simple string, but the prompt now expects a structured history.
-    # We will adjust to correctly send the full history from frontend, so backend receives correct structure.
-    chat_history_from_frontend = request.json.get('chatHistory', [])
-    latest_user_message = user_message_data # Assuming message still carries the last user input directly if chatHistory is provided separately
+    body = request.get_json(silent=True) or {}
+    latest_user_message = (body.get('message') or '').strip()
+    history = body.get('chatHistory') or []
 
-    # Construct the full chat history for Gemini including prior turns
-    gemini_chat_history = []
-    for chat_turn in chat_history_from_frontend:
-        gemini_chat_history.append({'role': chat_turn['role'], 'parts': [{'text': chat_turn['text']}]})
+    # Build Gemini conversation from the frontend history (roles: 'user' / 'model').
+    contents = []
+    for turn in history:
+        role = turn.get('role')
+        text = (turn.get('text') or '').strip()
+        if role in ('user', 'model') and text:
+            contents.append({'role': role, 'parts': [{'text': text}]})
+    if latest_user_message and not (contents and contents[-1]['role'] == 'user'
+                                    and contents[-1]['parts'][0]['text'] == latest_user_message):
+        contents.append({'role': 'user', 'parts': [{'text': latest_user_message}]})
+    # Gemini conversations must start with a user turn.
+    while contents and contents[0]['role'] != 'user':
+        contents.pop(0)
+    if not contents:
+        return jsonify({"error": "No message provided."}), 400
 
-    # Add the current user message (which should be the last one in the chat_history_from_frontend)
-    # Or if frontend sends only the new message as 'message' field
-    if not chat_history_from_frontend and latest_user_message: # If frontend sends only latest message, treat it as single turn
-         gemini_chat_history.append({'role': 'user', 'parts': [{'text': latest_user_message}]})
-    elif chat_history_from_frontend and latest_user_message: # If frontend sends full history, last part is the latest user message
-        # Ensure the last message in gemini_chat_history is indeed the latest user message
-        if gemini_chat_history and gemini_chat_history[-1]['role'] == 'user' and gemini_chat_history[-1]['parts'][0]['text'] == latest_user_message:
-            pass # Already correctly added by iterating chat_history_from_frontend
-        else:
-             gemini_chat_history.append({'role': 'user', 'parts': [{'text': latest_user_message}]})
+    # Live market data for context
+    market_data = get_all_market_prices().json
 
+    system_instruction = f"""
+    You are Aura, an AI trading assistant. Give insightful, helpful and friendly answers to the user's
+    trading questions in a conversational, approachable tone. Emojis are fine where they fit.
+    You provide analysis and education, not financial advice; remind users of risk when they discuss real trades.
 
-    # Fetch live market data for context
-    market_data_response = get_all_market_prices()
-    market_data = market_data_response.json
-
-    # Trade history will now be managed on frontend, so we don't fetch it from local file
-    # For now, provide empty trade history, or fetch from a mock source if needed for LLM context,
-    # but the frontend will be responsible for displaying its own persistent trade history.
-    mock_trade_history = [] # Frontend handles persistence. Backend won't know trade history unless explicitly sent.
-
-    # Construct overall context for Gemini
-    context_prefix = f"""
-    You are Aura, an AI trading assistant. Your goal is to provide insightful, helpful, and **friendly** responses to the user's trading-related questions.
-    Adopt a **conversational, approachable, and encouraging tone**. Avoid overly formal or robotic language.
-    You can use emojis if appropriate to convey friendliness (e.g., 👋😊).
-
-    Here is the current live market data:
+    Current live market data:
     {json.dumps(market_data, indent=2)}
-
-    (Note: Trade history is now managed by the user on the frontend, so it's not provided in real-time here for chat context.)
     """
 
-    # Prepend context to the first user message, or handle as a system instruction
-    # For Gemini API, best practice is to structure as alternating roles.
-    # The first message from the user often acts as the initial prompt/context.
-    if gemini_chat_history:
-        # If there's already a conversation, add system instruction at the start of the first user turn.
-        # This approach ensures the context is always present without being a separate AI turn.
-        if gemini_chat_history[0]['role'] == 'user':
-            gemini_chat_history[0]['parts'][0]['text'] = context_prefix + "\n" + gemini_chat_history[0]['parts'][0]['text']
-        else: # If conversation starts with model, something is off, but prepend to first user turn when it appears
-             found_user_turn = False
-             for turn in gemini_chat_history:
-                 if turn['role'] == 'user':
-                     turn['parts'][0]['text'] = context_prefix + "\n" + turn['parts'][0]['text']
-                     found_user_turn = True
-                     break
-             if not found_user_turn: # Fallback if only AI messages in history
-                 gemini_chat_history = [{'role': 'user', 'parts': [{'text': context_prefix + "\n" + latest_user_message}]}] + gemini_chat_history
-    else: # If it's a brand new conversation
-        gemini_chat_history.append({'role': 'user', 'parts': [{'text': context_prefix + "\n" + latest_user_message}]})
-
-
     try:
-        # Debugging the chat history sent to Gemini
-        print("\n--- DEBUG: Chat history sent to Gemini API ---")
-        for entry in gemini_chat_history:
-            print(f"Role: {entry['role']}, Text: {entry['parts'][0]['text'][:200]}...") # Print first 200 chars
-        print("----------------------------------------------")
-
-        response = gemini_model.generate_content(gemini_chat_history)
-        ai_response = response.candidates[0].content.parts[0].text
+        ai_response = gemini_generate(contents, system_instruction=system_instruction)
         return jsonify({"response": ai_response})
     except Exception as e:
-        print(f"Error generating content with Gemini: {e}")
+        print(f"Error generating chat response with Gemini: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"Failed to get AI response: {e}"}), 500
+        return jsonify({"error": f"Failed to get AI response: {e}"}), 502
 
 # --- Removed Trade Log Endpoints (now handled by frontend Firestore) ---
 # TRADE_LOG_FILE = 'trades.json'
@@ -405,21 +378,21 @@ def calculate_indicators_for_df(df, indicators):
     df_copy = df.copy()
     
     if "RSI" in indicators:
-        df_copy.ta.rsi(append=True)
+        ind.add_rsi(df_copy)
     if "MACD" in indicators:
-        df_copy.ta.macd(append=True) # This will create MACD_12_26_9, MACDh_12_26_9, and MACDs_12_26_9
+        ind.add_macd(df_copy)  # MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
     if "Moving Averages" in indicators:
-        df_copy.ta.ema(length=9, append=True)
-        df_copy.ta.sma(length=20, append=True)
-        df_copy.ta.ema(length=50, append=True)
+        ind.add_ema(df_copy, 9)
+        ind.add_sma(df_copy, 20)
+        ind.add_ema(df_copy, 50)
     if "Bollinger Bands" in indicators:
-        df_copy.ta.bbands(append=True)
+        ind.add_bbands(df_copy)  # BBL/BBM/BBU/BBB/BBP_5_2.0
     if "Stochastic Oscillator" in indicators:
-        df_copy.ta.stoch(append=True)
+        ind.add_stoch(df_copy)
     if "Volume" in indicators:
         df_copy['volume'] = pd.to_numeric(df_copy['volume'])
     if "ATR" in indicators:
-        df_copy.ta.atr(append=True)
+        ind.add_atr(df_copy)  # ATR_14 -- previously never created, so ATR-based SL/TP never ran
 
     # --- NEW DEBUG PRINT: List all columns after pandas_ta ---
     print(f"\n--- DEBUG: ORMCR Analysis ALL COLUMNS after pandas_ta: ---")
@@ -886,14 +859,71 @@ def apply_ormcr_logic(analysis_data, selected_indicators_from_frontend):
         "trend_analysis_by_tf": {tf: {k: v for k, v in data.items() if k != 'df'} for tf, data in analysis_data.items()}
     }
 
+_PRICE_DETAIL = {"type": "OBJECT", "properties": {"price": {"type": "STRING"}, "percentage_change": {"type": "STRING"}}}
+ANALYSIS_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "confidence_score": {"type": "STRING"},
+        "signal_strength": {"type": "STRING"},
+        "market_summary": {"type": "STRING"},
+        "ai_suggestion": {
+            "type": "OBJECT",
+            "properties": {
+                "entry_type": {"type": "STRING"},
+                "recommended_action": {"type": "STRING"},
+                "position_size": {"type": "STRING"},
+            },
+        },
+        "stop_loss": _PRICE_DETAIL,
+        "take_profit_1": _PRICE_DETAIL,
+        "take_profit_2": _PRICE_DETAIL,
+        "technical_indicators_analysis": {"type": "STRING"},
+        "next_step_for_user": {"type": "STRING"},
+    },
+    "required": ["confidence_score", "signal_strength", "market_summary", "ai_suggestion", "stop_loss",
+                 "take_profit_1", "take_profit_2", "technical_indicators_analysis", "next_step_for_user"],
+}
+
+
+def build_rule_based_result(ormcr_results):
+    """Analysis response built only from the backend's own calculations (no AI needed)."""
+    entering = str(ormcr_results['entry_suggestion']).upper().startswith('ENTER')
+    strength = str(ormcr_results['calculated_signal_strength']).upper()
+    if entering and 'BUY' in strength:
+        entry_type = 'BUY ORDER'
+    elif entering and 'SELL' in strength:
+        entry_type = 'SELL ORDER'
+    else:
+        entry_type = 'WAIT'
+
+    def detail(price_key, pct_key):
+        return {"price": ormcr_results[price_key], "percentage_change": ormcr_results[pct_key]}
+
+    return {
+        "confidence_score": f"{ormcr_results['calculated_confidence_score']}%",
+        "signal_strength": ormcr_results['calculated_signal_strength'],
+        "market_summary": f"Overall bias: {ormcr_results['overall_bias']}. "
+                          f"Status: {ormcr_results['confirmation_status']}.",
+        "ai_suggestion": {
+            "entry_type": entry_type,
+            "recommended_action": 'ENTER NOW' if entry_type != 'WAIT' else 'MONITOR',
+            "position_size": ormcr_results['position_size_suggestion'],
+        },
+        "stop_loss": detail('sl_price', 'sl_percent_change'),
+        "take_profit_1": detail('tp1_price', 'tp1_percent_change'),
+        "take_profit_2": detail('tp2_price', 'tp2_percent_change'),
+        "technical_indicators_analysis": ormcr_results['confirmation_reason'],
+        "next_step_for_user": "Review the signal details above." if entry_type != 'WAIT'
+                              else "Wait for confirmation before entering.",
+        "ormcr_confirmation_status": ormcr_results['confirmation_status'],
+        "ormcr_overall_bias": ormcr_results['overall_bias'],
+        "ormcr_reason": ormcr_results['confirmation_reason'],
+    }
+
+
 @app.route('/run_ormcr_analysis', methods=['POST'])
 def run_ormcr_analysis():
-    if not gemini_model:
-        return jsonify({"error": "Gemini model not initialized"}), 500
-    if not bybit_client:
-        return jsonify({"error": "Bybit client not initialized"}), 500
-
-    data = request.json
+    data = request.get_json(silent=True) or {}
     currency_pair = data.get('currencyPair')
     timeframes = data.get('timeframes', [])
     trade_type = data.get('tradeType')
@@ -940,6 +970,7 @@ def run_ormcr_analysis():
 
 
     ormcr_results = apply_ormcr_logic(analysis_data_by_tf, indicators)
+    base_result = build_rule_based_result(ormcr_results)
 
     detailed_tf_data_for_prompt = {}
     for tf, data in analysis_data_by_tf.items():
@@ -1020,79 +1051,31 @@ def run_ormcr_analysis():
         "\n**IMPORTANT: Maintain a friendly, conversational, and encouraging tone throughout your response. Use simple, clear language and feel free to include relevant emojis to enhance friendliness (e.g., 👋😊).**"
     ]
 
+    if gemini_client is None:
+        return jsonify(base_result)
+
     try:
-        response = gemini_model.generate_content(
-            prompt_parts,
-            generation_config={
-                "response_mime_type": "application/json",
-                "response_schema": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "confidence_score": {"type": "STRING"},
-                        "signal_strength": {"type": "STRING"},
-                        "market_summary": {"type": "STRING"},
-                        "ai_suggestion": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "entry_type": {"type": "STRING"},
-                                "recommended_action": {"type": "STRING"},
-                                "position_size": {"type": "STRING"}
-                            }
-                        },
-                        "stop_loss": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "price": {"type": "STRING"},
-                                "percentage_change": {"type": "STRING"}
-                            }
-                        },
-                        "take_profit_1": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "price": {"type": "STRING"},
-                                "percentage_change": {"type": "STRING"}
-                            }
-                        },
-                        "take_profit_2": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "price": {"type": "STRING"},
-                                "percentage_change": {"type": "STRING"}
-                            }
-                        },
-                        "technical_indicators_analysis": {"type": "STRING"},
-                        "next_step_for_user": {"type": "STRING"}
-                    },
-                    "required": ["confidence_score", "signal_strength", "market_summary", "ai_suggestion", "stop_loss", "take_profit_1", "take_profit_2", "technical_indicators_analysis", "next_step_for_user"]
-                }
-            }
-        )
-        
-        ai_analysis_results = json.loads(response.candidates[0].content.parts[0].text)
-
-        # Append ORMCR backend results for frontend to display
-        ai_analysis_results['ormcr_confirmation_status'] = ormcr_results['confirmation_status']
-        ai_analysis_results['ormcr_overall_bias'] = ormcr_results['overall_bias']
-        ai_analysis_results['ormcr_reason'] = ormcr_results['confirmation_reason'] # This is the detailed reason from backend
-
-        # Ensure SL/TP values match backend calculations, especially if N/A
-        ai_analysis_results['stop_loss']['price'] = ormcr_results['sl_price']
-        ai_analysis_results['stop_loss']['percentage_change'] = ormcr_results['sl_percent_change']
-        ai_analysis_results['take_profit_1']['price'] = ormcr_results['tp1_price']
-        ai_analysis_results['take_profit_1']['percentage_change'] = ormcr_results['tp1_percent_change']
-        ai_analysis_results['take_profit_2']['price'] = ormcr_results['tp2_price']
-        ai_analysis_results['take_profit_2']['percentage_change'] = ormcr_results['tp2_percent_change']
-        
-        # Ensure position_size reflects backend logic
-        ai_analysis_results['ai_suggestion']['position_size'] = ormcr_results['position_size_suggestion']
-
-
-        return jsonify(ai_analysis_results)
-
+        ai_text = gemini_generate("\n".join(prompt_parts), response_schema=ANALYSIS_RESPONSE_SCHEMA)
+        ai_analysis_results = json.loads(ai_text)
     except Exception as e:
+        # The signal itself doesn't depend on the AI, so return it with a note instead of failing.
         print(f"Error generating ORMCR analysis with Gemini: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"Failed to get AI analysis: {e}"}), 500
+        base_result['next_step_for_user'] += f" (AI commentary unavailable right now: {e})"
+        return jsonify(base_result)
+
+    # The backend's numbers always win over anything the model wrote.
+    for key in ('ormcr_confirmation_status', 'ormcr_overall_bias', 'ormcr_reason',
+                'confidence_score', 'signal_strength'):
+        ai_analysis_results[key] = base_result[key]
+    for key in ('stop_loss', 'take_profit_1', 'take_profit_2'):
+        ai_analysis_results[key] = base_result[key]
+    ai_analysis_results.setdefault('ai_suggestion', {})
+    ai_analysis_results['ai_suggestion'].update(base_result['ai_suggestion'])
+    for key in ('market_summary', 'technical_indicators_analysis', 'next_step_for_user'):
+        if not ai_analysis_results.get(key):
+            ai_analysis_results[key] = base_result[key]
+    return jsonify(ai_analysis_results)
 
 
 if __name__ == '__main__':
