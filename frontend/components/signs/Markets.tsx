@@ -83,7 +83,7 @@ function StrategyCard({ s, onOpen }: { s: StrategyView; onOpen: (x: Signal) => v
       </div>
       {!s.tested_here && <p className="text-xs mt-1" style={{ color: "var(--rust)" }}>Not tested on this market yet. Shown for reference only.</p>}
       <div className="grid gap-1.5 mt-3">{s.checks.map(c => <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>)}</div>
-      {ready ? <button className="btn btn-violet mt-3 text-sm" onClick={() => onOpen(s.signal!)}>Open the plan</button> : <p className="text-sm muted mt-2">{s.watch}</p>}
+      {ready ? <button className="btn btn-violet mt-3 text-sm" onClick={() => onOpen(s.signal!)}>Open the plan</button> : !s.watch.startsWith("Missing") && <p className="text-sm muted mt-2">{s.watch}</p>}
     </div>
   );
 }
