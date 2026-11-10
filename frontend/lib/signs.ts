@@ -4,7 +4,7 @@ export const API = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || "http://127.0.0.1
 export type Side = "long" | "short";
 export interface Stats { name: string; win_rate: number; avg_r: number; per_week: string; years_positive: string; worst_losing_streak: number; hold: string; max_risk_hint: number }
 export interface Signal {
-  id: string; strategy: "weekly" | "squeeze" | "pullback"; strategy_name: string; symbol: string; ticker: string; name: string;
+  id: string; strategy: "weekly" | "squeeze" | "pullback" | "manual" | "scalp"; strategy_name: string; symbol: string; ticker: string; name: string;
   side: Side; entry: number; sl: number; tp: number; rr: number; risk_pct_of_price: number; candle_time: string; expires: string;
   reasons: string[]; stats: Stats; status?: string; price?: number | null; closed_at?: string | null;
 }
@@ -13,7 +13,7 @@ export interface Near { strategy: string; strategy_name: string; symbol: string;
 export interface Board { symbol: string; ticker: string; name: string; week_return_pct?: number; strength?: number; error?: string }
 export interface Weekly { week_start: string; next_scan: string; pick: Signal | null; leaderboard: Board[]; note: string | null }
 export interface ScanResult { generated_at: string; seconds: number; side: string; weekly: Weekly | null; signals: Signal[]; near: Near[]; errors: { symbol: string; error: string }[]; markets_scanned: number }
-export interface PaperTrade extends Signal { opened_at: string; risk_usd: number; result?: { status: string; r?: number; exit?: number; price?: number; closed_at?: string } }
+export interface PaperTrade extends Signal { opened_at: string; risk_usd: number; note?: string; result?: { status: string; r?: number; exit?: number; price?: number; closed_at?: string } }
 
 async function call<T>(path: string, init?: RequestInit, timeoutMs = 90000): Promise<T> {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -129,3 +129,9 @@ export function money(cur: string, x: number) { return `${x < 0 ? "−" : ""}${c
 // ---------- live prices
 export type PriceMap = Record<string, { price: number; change_24h_pct: number | null }>;
 export const getPrices = (symbols: string[]) => call<{ prices: PriceMap; at: string }>(`/api/prices?symbols=${symbols.join(",")}`, undefined, 15000);
+
+export const MANUAL_STATS: Stats = { name: "Manual", win_rate: 0, avg_r: 0, per_week: "", years_positive: "", worst_losing_streak: 0, hold: "", max_risk_hint: 6 };
+export const MARKET_LIST: [string, string, string][] = [["BTCUSDT", "BTC", "Bitcoin"], ["ETHUSDT", "ETH", "Ethereum"], ["SOLUSDT", "SOL", "Solana"], ["XRPUSDT", "XRP", "XRP"], ["GOLD", "XAUUSD", "Gold"],
+  ["BNBUSDT", "BNB", "BNB"], ["ADAUSDT", "ADA", "Cardano"], ["DOGEUSDT", "DOGE", "Dogecoin"], ["AVAXUSDT", "AVAX", "Avalanche"], ["LINKUSDT", "LINK", "Chainlink"], ["DOTUSDT", "DOT", "Polkadot"],
+  ["LTCUSDT", "LTC", "Litecoin"], ["TRXUSDT", "TRX", "TRON"], ["ATOMUSDT", "ATOM", "Cosmos"], ["NEARUSDT", "NEAR", "NEAR"], ["UNIUSDT", "UNI", "Uniswap"], ["BCHUSDT", "BCH", "Bitcoin Cash"],
+  ["XLMUSDT", "XLM", "Stellar"], ["ETCUSDT", "ETC", "Ethereum Classic"], ["FILUSDT", "FIL", "Filecoin"], ["AAVEUSDT", "AAVE", "Aave"]];

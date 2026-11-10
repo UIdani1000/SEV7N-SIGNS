@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PaperTrade, Store, tradeStatus, fmtPrice, usd, STATS_LABEL } from "@/lib/signs";
 import { Ladder, LiveTag } from "./parts";
+import ManualTrade from "./ManualTrade";
 import { usePrices } from "@/lib/usePrices";
 
-const LABEL: Record<string, string> = { target_hit: "Target hit", stopped: "Stopped out", expired: "Closed at time limit", open: "Open", unknown: "Checking" };
+const LABEL: Record<string, string> = { target_hit: "Target hit", stopped: "Stopped out", expired: "Closed at time limit", closed: "Closed by you", open: "Open", unknown: "Checking" };
 
 export default function Paper({ store, setStore, toast }: { store: Store; setStore: (s: Store) => void; toast: (m: string) => void }) {
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); const [adding, setAdding] = useState(false);
   const open = store.paper.filter(t => !t.result || t.result.status === "open" || t.result.status === "unknown");
   const closed = store.paper.filter(t => t.result && !["open", "unknown"].includes(t.result.status));
   const refresh = useCallback(async () => {
@@ -43,12 +44,22 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
   }, [live.at]); // eslint-disable-line react-hooks/exhaustive-deps
   const cents = (x: number) => `$${Math.abs(x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const sign = (x: number) => (x >= 0 ? "+" : "−") + cents(x);
+  const closeNow = (t: PaperTrade) => {
+    const r = liveR(t); const px = live.prices[t.symbol]?.price;
+    if (r == null || px == null) { toast("Waiting for a live price before closing."); return; }
+    setStore({ ...store, paper: store.paper.map(x => x.id === t.id ? { ...x, result: { status: "closed", r, exit: px, closed_at: new Date().toISOString() } } : x) });
+    toast(`Closed ${t.ticker} at ${fmtPrice(px)}: ${sign(r * t.risk_usd)}.`);
+  };
+  const remove = (t: PaperTrade) => { setStore({ ...store, paper: store.paper.filter(x => x.id !== t.id) }); toast(`Removed ${t.ticker} from the paper book.`); };
   const tone = (x: number) => ({ color: x > 0 ? "var(--violet)" : x < 0 ? "var(--rust)" : undefined });
   const byStrat = Object.entries(closed.reduce((acc: Record<string, PaperTrade[]>, t) => { (acc[t.strategy] ||= []).push(t); return acc; }, {}));
   return (
     <section className="max-w-3xl mx-auto px-5 pt-6 pb-32">
-      <h1 className="display text-7xl">Paper</h1>
-      <p className="muted mt-2 max-w-prose">Practice with fake money. Each trade is checked against real prices until it hits its target, its stop, or its time limit.</p>
+      <div className="flex items-end justify-between gap-4 flex-wrap">
+        <h1 className="display text-7xl">Paper</h1>
+        <button className="btn btn-ink" onClick={() => setAdding(true)}>Add a trade</button>
+      </div>
+      <p className="muted mt-2 max-w-prose">Practise with fake money. Trades are checked against real prices until they hit the target, the stop or the time limit, or you close them.</p>
       <div className="mt-6 num">
         <div className="text-sm muted">Paper balance{open.length > 0 ? ", including open trades" : ""}</div>
         <div className="display text-[18vw] sm:text-8xl leading-none tick" style={tone(total)}>{cents(equity)}</div>
@@ -69,26 +80,32 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
         {byStrat.map(([k, ts]) => {
           const w = Math.round(ts.filter(t => (t.result?.r ?? 0) > 0).length / ts.length * 100);
           const avg = ts.reduce((a, t) => a + (t.result?.r ?? 0), 0) / ts.length;
-          return <div key={k} className="row flex justify-between num text-sm"><span className="font-semibold">{ts[0].strategy_name}</span>
-            <span>{ts.length} trades, {w}% wins (tested {ts[0].stats.win_rate}%), {avg >= 0 ? "+" : ""}{avg.toFixed(2)}R avg (tested +{ts[0].stats.avg_r}R)</span></div>;
+          const mine = k === "manual";
+          return <div key={k} className="row flex flex-wrap justify-between gap-x-4 gap-y-1 num text-sm"><span className="font-semibold">{mine ? "You (manual trades)" : ts[0].strategy_name}</span>
+            <span>{ts.length} trades, {w}% wins{mine ? "" : ` (tested ${ts[0].stats.win_rate}%)`}, {avg >= 0 ? "+" : ""}{avg.toFixed(2)}R avg{mine ? "" : ` (tested ${ts[0].stats.avg_r >= 0 ? "+" : ""}${ts[0].stats.avg_r}R)`}</span></div>;
         })}
         <p className="text-xs muted mt-2">{STATS_LABEL}</p>
       </div>}
 
       <div className="flex items-center justify-between mt-8">
-        <h2 className="font-semibold">Open ({open.length})</h2>
-        <div className="flex items-center gap-3">{open.length > 0 && <LiveTag at={live.at} stale={live.stale} />}<button className="btn btn-ghost text-sm !py-2" onClick={refresh} disabled={busy || !open.length}>{busy ? "Checking prices…" : "Check now"}</button></div>
+        <h2 className="font-semibold whitespace-nowrap">Open trades ({open.length})</h2>
+        <button className="btn btn-ghost text-sm !py-2 whitespace-nowrap" onClick={refresh} disabled={busy || !open.length}>{busy ? "Checking…" : "Check now"}</button>
       </div>
-      {!open.length && <p className="muted text-sm mt-3">No open paper trades. Open a setup on the Deck and tap “Paper trade this”.</p>}
+      {!open.length && <p className="muted text-sm mt-3">No open paper trades. Tap “Add a trade”, or open a setup on the Deck and tap “Paper trade this”.</p>}
       {open.map(t => (
-        <div key={t.id} className="row grid grid-cols-[1fr_1fr] gap-5">
+        <div key={t.id} className="row grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
           <div>
             <span className={`pill ${t.side === "long" ? "pill-long" : "pill-short"}`}>{t.side === "long" ? "Buy" : "Sell"}</span>
             <div className="display text-4xl mt-2">{t.ticker}</div>
-            <div className="text-sm muted">{t.strategy_name}, risking {usd(t.risk_usd)}</div>
+            <div className="text-sm muted">{t.strategy === "manual" ? "Your trade" : t.strategy_name}, risking {usd(t.risk_usd)}</div>
+            {t.note && <div className="text-sm mt-1">“{t.note}”</div>}
             {liveR(t) != null && <div className="num font-semibold mt-2 tick" style={tone(liveR(t)!)}>{sign(liveR(t)! * t.risk_usd)} now <span className="text-sm">({liveR(t)! >= 0 ? "+" : ""}{liveR(t)!.toFixed(2)}R)</span></div>}
           </div>
           <Ladder sig={t} price={live.prices[t.symbol]?.price ?? t.result?.price ?? null} height={130} />
+          <div className="min-[400px]:col-span-2 flex gap-2 mt-7 items-center">
+            <button className="btn btn-ghost text-sm !py-2" onClick={() => closeNow(t)}>Close now</button>
+            <button className="text-sm underline muted" onClick={() => { if (confirm(`Remove this ${t.ticker} trade without recording a result?`)) remove(t); }}>Remove</button>
+          </div>
         </div>
       ))}
 
@@ -101,6 +118,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
           </div>
         ))}
       </>}
+      {adding && <ManualTrade store={store} onClose={() => setAdding(false)} onAdd={t => { setStore({ ...store, paper: [...store.paper, t] }); setAdding(false); toast(`Paper trade opened: ${t.side === "long" ? "buy" : "sell"} ${t.ticker} at ${fmtPrice(t.entry)}, risking ${usd(t.risk_usd)}.`); }} />}
       {store.paper.length > 0 && <button className="btn btn-ghost text-sm mt-8" onClick={() => { if (confirm("Delete all paper trades and reset the paper balance?")) { setStore({ ...store, paper: [] }); toast("Paper book cleared."); } }}>Clear paper book</button>}
     </section>
   );

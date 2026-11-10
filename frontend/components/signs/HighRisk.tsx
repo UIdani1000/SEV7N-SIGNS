@@ -57,7 +57,7 @@ export default function HighRisk({ store, setStore, toast }: { store: Store; set
         <p className="text-sm muted">Watching {sym === "GOLD" ? "gold" : sym.replace("USDT", "")} on 5-minute candles. Checks every minute{px ? `; price ${fmtPrice(px)}` : ""}.</p>
         <LiveTag at={live.at} stale={live.stale} />
         {err && <p className="text-sm mt-2" style={{ color: "var(--rust)" }}>{err}</p>}
-        {setup && <div className="row mt-4 grid grid-cols-[1fr_1fr] gap-5">
+        {setup && <div className="row mt-4 grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
           <div><span className={`pill ${setup.side === "long" ? "pill-long" : "pill-short"}`}>{setup.side === "long" ? "Buy" : "Sell"} now</span>
             <p className="mt-2 text-sm">Close by <b>{new Date(setup.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> if neither level hits.</p></div>
           <Ladder sig={setup as unknown as Signal} price={px} height={130} /></div>}

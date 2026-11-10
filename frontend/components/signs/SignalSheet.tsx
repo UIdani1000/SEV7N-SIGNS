@@ -43,7 +43,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
 
         <div className="mt-5"><MiniChart sig={sig} tf={TF[sig.strategy]} /></div>
 
-        <div className="grid grid-cols-[1fr_1.1fr] gap-6 mt-6 items-start">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_1.1fr] gap-6 mt-6 items-start">
           <div><Ladder sig={sig} price={price} height={200} /><div className="mt-9"><LiveTag at={live.at} stale={live.stale} /></div></div>
           <div className="grid gap-3">
             <label className="text-sm font-semibold">Risk per trade

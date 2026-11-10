@@ -17,7 +17,8 @@
 html, body { background: var(--paper); color: var(--ink); }
 body { font-family: var(--font-body), system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 .display { font-family: var(--font-display), Impact, sans-serif; font-weight: 400; line-height: .86; letter-spacing: .005em; text-transform: uppercase; }
-.wordmark { font-family: var(--font-body); font-weight: 700; letter-spacing: .32em; font-size: .78rem; }
+.wordmark { font-family: var(--font-body); font-weight: 700; letter-spacing: .32em; font-size: .78rem; white-space: nowrap; }
+@media (max-width: 380px) { .wordmark { letter-spacing: .18em; font-size: .72rem; } }
 .muted { color: var(--stone); }
 .num { font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; border-radius: 6px; }
@@ -72,7 +73,9 @@ body { font-family: var(--font-body), system-ui, sans-serif; -webkit-font-smooth
 /* dock: bottom on phones, floating top pill on desktop */
 .dock { position: fixed; z-index: 30; left: 50%; transform: translateX(-50%); bottom: calc(.8rem + env(safe-area-inset-bottom));
   display: flex; gap: .25rem; background: var(--ink); color: var(--paper); padding: .35rem; border-radius: 999px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
-.dock button { padding: .55rem .78rem; border-radius: 999px; font-size: .85rem; font-weight: 600; opacity: .7; }
+.dock { max-width: calc(100vw - 1rem); }
+.dock button { padding: .55rem .78rem; border-radius: 999px; font-size: .85rem; font-weight: 600; opacity: .7; white-space: nowrap; flex: 0 1 auto; min-width: 0; }
+@media (max-width: 380px) { .dock { gap: 0; padding: .3rem; } .dock button { padding: .5rem .55rem; font-size: .78rem; } }
 .dock button[aria-current="page"] { background: var(--paper); color: var(--ink); opacity: 1; }
 @media (min-width: 900px) { .dock { bottom: auto; top: 1rem; } }
 

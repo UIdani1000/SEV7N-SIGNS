@@ -87,7 +87,7 @@ export default function Home() {
         <div className="flex items-center gap-3"><Mark size={30} /><span className="wordmark">SEV7N SIGNS</span></div>
         <div className="flex items-center gap-2">
           {user && <span className="text-xs muted hidden sm:inline">Synced</span>}
-          <button className="pill num !py-2 !px-3" onClick={() => setSettings(true)} aria-label="Edit balance and risk">{usd(store.balance)} at {store.riskPct}% risk</button>
+          <button className="pill num !py-2 !px-3 whitespace-nowrap" onClick={() => setSettings(true)} aria-label={`Balance ${usd(store.balance)}, risk ${store.riskPct}% per trade. Edit`}>{usd(store.balance)} at {store.riskPct}%<span className="hidden min-[420px]:inline">&nbsp;risk</span></button>
         </div>
       </header>
 
