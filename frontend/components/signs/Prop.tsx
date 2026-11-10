@@ -60,8 +60,8 @@ export default function Prop({ store, setStore, toast }: { store: Store; setStor
 
       <div className="row"><h2 className="font-semibold">Tested odds on this account</h2>
         <p className="text-sm muted mt-1">Historical replays of {n.p.name.includes("1.5") ? "this exact account" : "the ₦1.5M version (same rules)"}, starting a challenge every week since 2020.</p>
-        {PROP_ODDS.map(o => <div key={o.plan} className="flex justify-between text-sm num mt-2 gap-3"><span>{o.plan}</span><span className="text-right">passes {o.pass}%, about {o.days} days{o.perAttempt ? `, worth ${money("₦", o.perAttempt)} per attempt` : ""}</span></div>)}
-        <p className="text-xs muted mt-3">About 1 in 4 attempts passes both phases. Budget for several attempts. Past results are not a promise.</p></div>
+        {PROP_ODDS.map(o => <div key={o.plan} className="flex justify-between text-sm num mt-2 gap-3"><span>{o.plan}</span><span className="text-right">passes {o.pass}%, about {o.days} days, {o.payout}% of funded accounts paid out, worth {money("₦", o.perAttempt)} per attempt</span></div>)}
+        <p className="text-xs muted mt-3">Take signals from both Weekly Trend and Squeeze. Weekly Trend alone is too slow for this account. About 1 in 3 attempts passes; budget for several. Past results are not a promise.</p></div>
     </section>
   );
 }

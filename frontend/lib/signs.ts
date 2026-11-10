@@ -120,8 +120,8 @@ export function propNumbers(st: PropState) {
     breached: st.balance <= floor || st.balance <= dailyFloor };
 }
 export const PROP_ODDS = [
-  { plan: "Squeeze, 1% challenge / 0.75% funded", pass: 24, days: 76, perAttempt: 15300 },
-  { plan: "Squeeze, 0.75% / 0.75%", pass: 21, days: 116, perAttempt: 13200 },
-  { plan: "Weekly Trend, 2% / 1%", pass: 28, days: 182, perAttempt: 2000 },
+  { plan: "Weekly Trend + Squeeze, 1% challenge / 0.75% funded (recommended)", pass: 33, days: 105, perAttempt: 36700, payout: 68 },
+  { plan: "Weekly Trend + Squeeze, 0.75% / 0.5%", pass: 38, days: 163, perAttempt: 25300, payout: 75 },
+  { plan: "Squeeze only, 1% / 0.75%", pass: 24, days: 78, perAttempt: 15600, payout: 44 },
 ];
 export function money(cur: string, x: number) { return `${x < 0 ? "−" : ""}${cur}${Math.abs(Math.round(x)).toLocaleString()}`; }
