@@ -5,7 +5,7 @@ const TOOLS: [ToolView | "settings", string, string][] = [
   ["prop", "Prop Mode", "Track a challenge: limits, risk per trade, payouts"],
   ["lab", "Strategy Lab", "Test any rule book on real market history"],
   ["highrisk", "High Risk Mode", "5-minute scalp sessions, paper only"],
-  ["sync", "Sync", "Use the same data on every device"],
+  ["sync", "Account", "Sign in to keep your data on every device"],
   ["settings", "Settings", "Balance, risk and Telegram alerts"],
 ];
 export default function Tools({ onPick, onClose }: { onPick: (v: ToolView | "settings") => void; onClose: () => void }) {

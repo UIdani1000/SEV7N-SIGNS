@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Signal, plan, explain, usd } from "@/lib/signs";
+import { Signal, plan, explain, usd, fmtPrice } from "@/lib/signs";
 import { Ladder, LiveTag, MiniChart } from "./parts";
 import { usePrices } from "@/lib/usePrices";
 
@@ -11,9 +11,15 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
 }) {
   const [ai, setAi] = useState<{ text?: string | null; error?: string; loading?: boolean }>({});
   const [risk, setRisk] = useState(riskPct);
-  const p = plan(sig, balance, risk);
   const live = usePrices([sig.symbol]);
   const price = live.prices[sig.symbol]?.price ?? sig.price ?? null;
+  // Taking the setup now fills at the live price; stop and target stay where the strategy put them.
+  const entryNow = price ?? sig.entry;
+  const up = sig.side === "long";
+  const invalid = up ? (entryNow <= sig.sl ? "stop" : entryNow >= sig.tp ? "target" : null) : (entryNow >= sig.sl ? "stop" : entryNow <= sig.tp ? "target" : null);
+  const rrNow = Math.abs(sig.tp - entryNow) / Math.abs(entryNow - sig.sl);
+  const moved = Math.abs(entryNow - sig.entry) / sig.entry > 0.001;
+  const p = plan({ ...sig, entry: entryNow, rr: invalid ? sig.rr : rrNow }, balance, risk);
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
@@ -61,6 +67,8 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
           </div>
         </div>
 
+        {moved && !invalid && <p className="text-sm mt-5 num">Entering now fills at <b>{fmtPrice(entryNow)}</b> (the setup’s entry was {fmtPrice(sig.entry)}), so reward to risk becomes <b>1:{rrNow.toFixed(1)}</b>.</p>}
+        {invalid && <p className="text-sm mt-5 font-semibold" style={{ color: "var(--rust)" }}>Price is already past the {invalid}, so this setup is no longer valid to enter.</p>}
         {p.warnings.length > 0 && (
           <div className="mt-5 rounded-2xl p-4 grid gap-2" style={{ background: "var(--paper-2)" }} role="status">
             <div className="font-semibold text-sm">Risk Guardian</div>
@@ -78,7 +86,8 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
         </div>
 
         <div className="flex flex-wrap gap-3 mt-7">
-          <button className="btn btn-violet flex-1" onClick={() => onPaper(sig, p.riskUsd)}>Paper trade this</button>
+          <button className="btn btn-violet flex-1" disabled={!!invalid}
+            onClick={() => onPaper({ ...sig, entry: entryNow, rr: Math.round(rrNow * 100) / 100, reasons: moved ? [...sig.reasons, `Setup entry was ${sig.entry}; filled at the live price`] : sig.reasons }, p.riskUsd)}>Paper trade this</button>
           <button className="btn btn-ghost" onClick={copy}>Copy levels</button>
         </div>
         <p className="text-xs muted mt-4">Backtested results are not a promise. Paper-trade first. Not financial advice.</p>

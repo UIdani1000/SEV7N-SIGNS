@@ -1,6 +1,6 @@
 // Cross-device sync: email sign-in (Firebase Auth) + one Firestore document per user.
 import { initializeApp, getApps, FirebaseApp } from "firebase/app";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User } from "firebase/auth";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail, User } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import type { Store, PaperTrade } from "./signs";
 
@@ -24,6 +24,8 @@ export function friendly(e: unknown): string {
   if (code.includes("email-already-in-use")) return "An account with this email exists. Sign in instead.";
   if (code.includes("weak-password")) return "Use a password of at least 6 characters.";
   if (code.includes("invalid-email")) return "That email address doesn't look right.";
+  if (code.includes("missing-email")) return "Enter your email first.";
+  if (code.includes("too-many-requests")) return "Too many attempts. Wait a minute and try again.";
   if (code.includes("permission-denied")) return "The database refused the save. Check the Firestore rules.";
   return (e as Error)?.message || "Sync failed.";
 }
@@ -31,6 +33,7 @@ export const watchUser = (cb: (u: User | null) => void) => { try { return onAuth
 export const signIn = (email: string, pw: string) => signInWithEmailAndPassword(fb().auth, email, pw);
 export const signUp = (email: string, pw: string) => createUserWithEmailAndPassword(fb().auth, email, pw);
 export const logOut = () => signOut(fb().auth);
+export const resetPassword = (email: string) => sendPasswordResetEmail(fb().auth, email);
 
 export function merge(local: Store, remote: Store | null): Store {
   if (!remote) return local;

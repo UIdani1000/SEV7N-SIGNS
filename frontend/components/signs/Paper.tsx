@@ -1,13 +1,13 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PaperTrade, Store, tradeStatus, fmtPrice, usd, STATS_LABEL } from "@/lib/signs";
-import { Ladder, LiveTag } from "./parts";
+import { Ladder, LiveTag, Tick } from "./parts";
 import ManualTrade from "./ManualTrade";
 import { usePrices } from "@/lib/usePrices";
 
 const LABEL: Record<string, string> = { target_hit: "Target hit", stopped: "Stopped out", expired: "Closed at time limit", closed: "Closed by you", open: "Open", unknown: "Checking" };
 
-export default function Paper({ store, setStore, toast }: { store: Store; setStore: (s: Store) => void; toast: (m: string) => void }) {
+export default function Paper({ store, setStore, toast, signedIn = false, onSignIn = () => {} }: { store: Store; setStore: (s: Store) => void; toast: (m: string) => void; signedIn?: boolean; onSignIn?: () => void }) {
   const [busy, setBusy] = useState(false); const [adding, setAdding] = useState(false);
   const open = store.paper.filter(t => !t.result || t.result.status === "open" || t.result.status === "unknown");
   const closed = store.paper.filter(t => t.result && !["open", "unknown"].includes(t.result.status));
@@ -64,7 +64,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
         <div className="text-sm muted">Paper balance{open.length > 0 ? ", including open trades" : ""}</div>
         <div className="display text-[18vw] sm:text-8xl leading-none tick" style={tone(total)}>{cents(equity)}</div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
-          <span className="font-semibold" style={tone(total)}>{sign(total)} ({total >= 0 ? "+" : ""}{(total / Math.max(store.startBalance, 1) * 100).toFixed(1)}%) since {usd(store.startBalance)}</span>
+          <span className="font-semibold" style={tone(total)}>{sign(total)} ({total >= 0 ? "+" : ""}{(total / Math.max(store.startBalance, 1) * 100).toFixed(1)}%) since {usd(store.startBalance)} <Tick value={Math.round(total * 100)} /></span>
           {open.length > 0 && <LiveTag at={live.at} stale={live.stale} />}
         </div>
       </div>
@@ -91,6 +91,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
         <h2 className="font-semibold whitespace-nowrap">Open trades ({open.length})</h2>
         <button className="btn btn-ghost text-sm !py-2 whitespace-nowrap" onClick={refresh} disabled={busy || !open.length}>{busy ? "Checking…" : "Check now"}</button>
       </div>
+      {!signedIn && store.paper.length > 0 && <p className="text-sm mt-4 rounded-2xl p-3" style={{ background: "var(--paper-2)" }}>These trades live only on this device. <button className="underline font-semibold" onClick={onSignIn}>Sign in</button> to keep them on all your devices.</p>}
       {!open.length && <p className="muted text-sm mt-3">No open paper trades. Tap “Add a trade”, or open a setup on the Deck and tap “Paper trade this”.</p>}
       {open.map(t => (
         <div key={t.id} className="row grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
@@ -100,6 +101,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
             <div className="text-sm muted">{t.strategy === "manual" ? "Your trade" : t.strategy_name}, risking {usd(t.risk_usd)}</div>
             {t.note && <div className="text-sm mt-1">“{t.note}”</div>}
             {liveR(t) != null && <div className="num font-semibold mt-2 tick" style={tone(liveR(t)!)}>{sign(liveR(t)! * t.risk_usd)} now <span className="text-sm">({liveR(t)! >= 0 ? "+" : ""}{liveR(t)!.toFixed(2)}R)</span></div>}
+            {live.prices[t.symbol] && <div className="text-sm num mt-1">Price {fmtPrice(live.prices[t.symbol].price)} <Tick value={live.prices[t.symbol].price} /></div>}
           </div>
           <Ladder sig={t} price={live.prices[t.symbol]?.price ?? t.result?.price ?? null} height={130} />
           <div className="min-[400px]:col-span-2 flex gap-2 mt-7 items-center">

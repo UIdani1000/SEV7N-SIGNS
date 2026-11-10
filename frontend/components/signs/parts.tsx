@@ -1,6 +1,18 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Signal, Near, fmtPrice, getCandles } from "@/lib/signs";
+
+/** Arrow that flashes up or down when a live value changes. */
+export function Tick({ value }: { value: number | null | undefined }) {
+  const prev = useRef<number | null>(null); const [dir, setDir] = useState<0 | 1 | -1>(0);
+  useEffect(() => {
+    if (value == null) return;
+    if (prev.current != null && value !== prev.current) { setDir(value > prev.current ? 1 : -1); const t = setTimeout(() => setDir(0), 2500); prev.current = value; return () => clearTimeout(t); }
+    prev.current = value;
+  }, [value]);
+  if (!dir) return <span className="inline-block w-3" aria-hidden="true" />;
+  return <span className="inline-block w-3 text-xs" style={{ color: dir > 0 ? "var(--violet)" : "var(--rust)" }} aria-label={dir > 0 ? "up" : "down"}>{dir > 0 ? "▲" : "▼"}</span>;
+}
 
 /** Small "Live" tag: a dot that pulses after each update, and how long ago it was. */
 export function LiveTag({ at, stale }: { at: number | null; stale: boolean }) {

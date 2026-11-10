@@ -86,7 +86,8 @@ export default function Home() {
       <header className="max-w-6xl mx-auto px-5 pt-5 md:pt-20 flex items-center justify-between">
         <div className="flex items-center gap-3"><Mark size={30} /><span className="wordmark">SEV7N SIGNS</span></div>
         <div className="flex items-center gap-2">
-          {user && <span className="text-xs muted hidden sm:inline">Synced</span>}
+          {user ? <button className="w-9 h-9 rounded-full grid place-items-center display text-lg shrink-0" style={{ background: "var(--violet)", color: "var(--violet-ink)" }} onClick={() => setView("sync")} aria-label={`Account: ${user.email}`}>{(user.email || "?")[0].toUpperCase()}</button>
+            : <button className="pill !py-2 !px-3 font-semibold whitespace-nowrap" onClick={() => setView("sync")}>Sign in</button>}
           <button className="pill num !py-2 !px-3 whitespace-nowrap" onClick={() => setSettings(true)} aria-label={`Balance ${usd(store.balance)}, risk ${store.riskPct}% per trade. Edit`}>{usd(store.balance)} at {store.riskPct}%<span className="hidden min-[420px]:inline">&nbsp;risk</span></button>
         </div>
       </header>
@@ -148,11 +149,11 @@ export default function Home() {
       </div>}
 
       {view === "markets" && <Markets pair={store.pair || "BTCUSDT"} setPair={p => setStore({ ...store, pair: p })} onOpen={setOpen} />}
-      {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} />}
+      {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} signedIn={!!user} onSignIn={() => setView("sync")} />}
       {view === "prop" && <Prop store={store} setStore={setStore} toast={toast} />}
       {view === "lab" && <Lab store={store} />}
       {view === "highrisk" && <HighRisk store={store} setStore={setStore} toast={toast} />}
-      {view === "sync" && <Account user={user} syncedAt={syncedAt} toast={toast} />}
+      {view === "sync" && <Account user={user} syncedAt={syncedAt} toast={toast} trades={store.paper.length} />}
       {view === "ask" && <Ask />}
 
       <nav className="dock" aria-label="Main">
