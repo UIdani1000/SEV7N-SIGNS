@@ -79,8 +79,9 @@ def _binance(symbol, tf, limit, futures=False):
 
 
 SOURCES = {  # tried in order
-    "GOLD": [lambda tf, n: _binance("XAUUSDT", tf, n, futures=True), lambda tf, n: _bybit("XAUTUSDT", tf, n, "linear"),
-             lambda tf, n: _binance("PAXGUSDT", tf, n), lambda tf, n: _bybit("PAXGUSDT", tf, n)],
+    # One consistent gold source for candles AND live prices (Tether Gold on Bybit); mixing sources moved levels by ~$15.
+    "GOLD": [lambda tf, n: _bybit("XAUTUSDT", tf, n, "linear"), lambda tf, n: _bybit("PAXGUSDT", tf, n),
+             lambda tf, n: _binance("PAXGUSDT", tf, n)],
 }
 LAST_SOURCE = {}
 
@@ -128,7 +129,7 @@ def _bybit_ticker(symbol, category="spot"):
 
 
 def _one_price(symbol):
-    tries = [("XAUTUSDT", "linear"), ("PAXGUSDT", "spot")] if symbol == "GOLD" else [(symbol, "spot"), (symbol, "linear")]
+    tries = [("XAUTUSDT", "linear"), ("PAXGUSDT", "spot")] if symbol == "GOLD" else [(symbol, "spot"), (symbol, "linear")]   # same order as candles
     for sym, cat in tries:
         try:
             return _bybit_ticker(sym, cat)

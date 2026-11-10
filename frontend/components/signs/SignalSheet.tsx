@@ -90,6 +90,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
             onClick={() => onPaper({ ...sig, entry: entryNow, rr: Math.round(rrNow * 100) / 100, reasons: moved ? [...sig.reasons, `Setup entry was ${sig.entry}; filled at the live price`] : sig.reasons }, p.riskUsd)}>Paper trade this</button>
           <button className="btn btn-ghost" onClick={copy}>Copy levels</button>
         </div>
+        {sig.symbol === "GOLD" && <p className="text-xs muted mt-4">Gold prices come from Tether Gold (XAUT), which tracks spot gold. Your broker’s XAUUSD can sit a few dollars away; shift the entry, stop and target by the same gap.</p>}
         <p className="text-xs muted mt-4">Backtested results are not a promise. Paper-trade first. Not financial advice.</p>
       </aside>
     </>
