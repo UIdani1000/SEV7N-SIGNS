@@ -84,7 +84,7 @@ export default function Home() {
   return (
     <main className="min-h-dvh">
       <header className="max-w-6xl mx-auto px-5 pt-5 md:pt-20 flex items-center justify-between">
-        <div className="flex items-center gap-3"><Mark size={30} /><span className="wordmark">SEV7N SIGNS</span></div>
+        <div className="flex items-center gap-3" aria-label="SEV7N SIGNS"><Mark size={30} /><span className="wordmark max-[359px]:hidden">SEV7N SIGNS</span></div>
         <div className="flex items-center gap-2">
           {user ? <button className="w-9 h-9 rounded-full grid place-items-center display text-lg shrink-0" style={{ background: "var(--violet)", color: "var(--violet-ink)" }} onClick={() => setView("sync")} aria-label={`Account: ${user.email}`}>{(user.email || "?")[0].toUpperCase()}</button>
             : <button className="pill !py-2 !px-3 font-semibold whitespace-nowrap" onClick={() => setView("sync")}>Sign in</button>}
