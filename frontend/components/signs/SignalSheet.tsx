@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Signal, plan, explain, usd } from "@/lib/signs";
-import { Ladder, MiniChart } from "./parts";
+import { Ladder, LiveTag, MiniChart } from "./parts";
+import { usePrices } from "@/lib/usePrices";
 
 const TF: Record<string, string> = { weekly: "1d", squeeze: "4h", pullback: "1h" };
 
@@ -11,6 +12,8 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
   const [ai, setAi] = useState<{ text?: string | null; error?: string; loading?: boolean }>({});
   const [risk, setRisk] = useState(riskPct);
   const p = plan(sig, balance, risk);
+  const live = usePrices([sig.symbol]);
+  const price = live.prices[sig.symbol]?.price ?? sig.price ?? null;
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
@@ -41,7 +44,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
         <div className="mt-5"><MiniChart sig={sig} tf={TF[sig.strategy]} /></div>
 
         <div className="grid grid-cols-[1fr_1.1fr] gap-6 mt-6 items-start">
-          <Ladder sig={sig} price={sig.price ?? null} height={200} />
+          <div><Ladder sig={sig} price={price} height={200} /><div className="mt-9"><LiveTag at={live.at} stale={live.stale} /></div></div>
           <div className="grid gap-3">
             <label className="text-sm font-semibold">Risk per trade
               <div className="flex items-center gap-2 mt-1">

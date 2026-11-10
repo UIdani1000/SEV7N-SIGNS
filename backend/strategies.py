@@ -114,6 +114,47 @@ def fetch_candles(symbol, tf, limit=300, include_live=False):
     return df
 
 
+_price_cache = {}
+PRICE_SECONDS = 5
+
+
+def _bybit_ticker(symbol, category="spot"):
+    r = HTTP.get("https://api.bybit.com/v5/market/tickers", params={"category": category, "symbol": symbol}, timeout=8)
+    row = (r.json().get("result", {}).get("list") or [None])[0]
+    if not row or not row.get("lastPrice"):
+        raise ValueError(f"no ticker for {symbol}")
+    price = float(row["lastPrice"]); prev = float(row.get("prevPrice24h") or 0)
+    return {"price": price, "change_24h_pct": round((price / prev - 1) * 100, 2) if prev else None}
+
+
+def _one_price(symbol):
+    tries = [("XAUTUSDT", "linear"), ("PAXGUSDT", "spot")] if symbol == "GOLD" else [(symbol, "spot"), (symbol, "linear")]
+    for sym, cat in tries:
+        try:
+            return _bybit_ticker(sym, cat)
+        except Exception:
+            continue
+    return {"price": last_price(symbol), "change_24h_pct": None}   # fall back to the latest candle
+
+
+def live_prices(symbols):
+    """Latest traded prices, cached for a few seconds. Unknown symbols are ignored."""
+    out, need, now = {}, [], time.time()
+    for s in symbols:
+        hit = _price_cache.get(s)
+        if hit and now - hit[0] < PRICE_SECONDS: out[s] = hit[1]
+        else: need.append(s)
+    def one(s):
+        try: return s, _one_price(s)
+        except Exception: return s, None
+    if need:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for s, v in pool.map(one, need):
+                if v:
+                    _price_cache[s] = (time.time(), v); out[s] = v
+    return out
+
+
 def last_price(symbol):
     return float(fetch_candles(symbol, "1h", 3, include_live=True)["close"].iloc[-1])
 

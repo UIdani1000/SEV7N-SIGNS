@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MarketInfo, MarketView, Signal, StrategyView, getMarket, getMarkets, fmtPrice } from "@/lib/signs";
-import { PriceChart } from "./parts";
+import { LiveTag, PriceChart } from "./parts";
+import { usePrices } from "@/lib/usePrices";
 
 const TFS = [["1h", "1 hour"], ["4h", "4 hours"], ["1d", "1 day"]];
 
@@ -18,6 +19,9 @@ export default function Markets({ pair, setPair, onOpen }: { pair: string; setPa
     setBusy(false);
   }, []);
   useEffect(() => { load(pair); }, [pair, load]);
+  useEffect(() => { const id = setInterval(() => { if (document.visibilityState === "visible") load(pair); }, 60000); return () => clearInterval(id); }, [pair, load]);
+  const live = usePrices([pair]);
+  const lp = live.prices[pair];
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     const l = t ? list.filter(m => m.ticker.toLowerCase().includes(t) || m.name.toLowerCase().includes(t)) : list;
@@ -46,8 +50,9 @@ export default function Markets({ pair, setPair, onOpen }: { pair: string; setPa
         <div className="mt-6 flex flex-wrap items-end gap-x-6 gap-y-2">
           <h2 className="display text-[22vw] sm:text-[8rem] leading-none">{view.ticker}</h2>
           <div className="num pb-2">
-            <div className="text-2xl font-semibold">{fmtPrice(view.price)}</div>
-            <div className="text-sm"><span style={{ color: view.change_24h_pct >= 0 ? "var(--violet)" : "var(--rust)" }}>{view.change_24h_pct >= 0 ? "+" : ""}{view.change_24h_pct}%</span> <span className="muted">since yesterday&apos;s close, daily trend {view.daily_trend}</span></div>
+            <div className="text-2xl font-semibold tick">{fmtPrice(lp?.price ?? view.price)}</div>
+            {(() => { const ch = lp?.change_24h_pct ?? view.change_24h_pct; return <div className="text-sm"><span style={{ color: ch >= 0 ? "var(--violet)" : "var(--rust)" }}>{ch >= 0 ? "+" : ""}{ch}%</span> <span className="muted">{lp?.change_24h_pct != null ? "in 24 hours" : "since yesterday’s close"}, daily trend {view.daily_trend}</span></div>; })()}
+            <LiveTag at={live.at} stale={live.stale} />
           </div>
         </div>
 

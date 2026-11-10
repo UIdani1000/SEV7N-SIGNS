@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { PaperTrade, Store, tradeStatus, fmtPrice, usd, STATS_LABEL } from "@/lib/signs";
-import { Ladder } from "./parts";
+import { Ladder, LiveTag } from "./parts";
+import { usePrices } from "@/lib/usePrices";
 
 const LABEL: Record<string, string> = { target_hit: "Target hit", stopped: "Stopped out", expired: "Closed at time limit", open: "Open", unknown: "Checking" };
 
@@ -28,6 +29,8 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
   }, [open, store, setStore, toast]);
   useEffect(() => { refresh(); const id = setInterval(refresh, 60000); return () => clearInterval(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const live = usePrices(open.map(t => t.symbol));
+  const liveR = (t: PaperTrade) => { const px = live.prices[t.symbol]?.price; if (px == null) return t.result?.r ?? null; const r = (px - t.entry) / Math.abs(t.entry - t.sl) * (t.side === "long" ? 1 : -1); return Math.round(r * 100) / 100; };
   const pnl = closed.reduce((a, t) => a + (t.result?.r ?? 0) * t.risk_usd, 0);
   const byStrat = Object.entries(closed.reduce((acc: Record<string, PaperTrade[]>, t) => { (acc[t.strategy] ||= []).push(t); return acc; }, {}));
   return (
@@ -53,7 +56,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
 
       <div className="flex items-center justify-between mt-8">
         <h2 className="font-semibold">Open ({open.length})</h2>
-        <button className="btn btn-ghost text-sm !py-2" onClick={refresh} disabled={busy || !open.length}>{busy ? "Checking prices…" : "Check now"}</button>
+        <div className="flex items-center gap-3">{open.length > 0 && <LiveTag at={live.at} stale={live.stale} />}<button className="btn btn-ghost text-sm !py-2" onClick={refresh} disabled={busy || !open.length}>{busy ? "Checking prices…" : "Check now"}</button></div>
       </div>
       {!open.length && <p className="muted text-sm mt-3">No open paper trades. Open a setup on the Deck and tap “Paper trade this”.</p>}
       {open.map(t => (
@@ -62,9 +65,9 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
             <span className={`pill ${t.side === "long" ? "pill-long" : "pill-short"}`}>{t.side === "long" ? "Buy" : "Sell"}</span>
             <div className="display text-4xl mt-2">{t.ticker}</div>
             <div className="text-sm muted">{t.strategy_name}, risking {usd(t.risk_usd)}</div>
-            {t.result?.r != null && <div className="num font-semibold mt-2">{t.result.r >= 0 ? "+" : ""}{t.result.r.toFixed(2)}R now</div>}
+            {liveR(t) != null && <div className="num font-semibold mt-2 tick" style={{ color: liveR(t)! >= 0 ? "var(--violet)" : "var(--rust)" }}>{liveR(t)! >= 0 ? "+" : ""}{liveR(t)!.toFixed(2)}R now</div>}
           </div>
-          <Ladder sig={t} price={t.result?.price ?? null} height={130} />
+          <Ladder sig={t} price={live.prices[t.symbol]?.price ?? t.result?.price ?? null} height={130} />
         </div>
       ))}
 

@@ -47,6 +47,10 @@ body { font-family: var(--font-body), system-ui, sans-serif; -webkit-font-smooth
 .zone-gain { position: absolute; left: 0; width: 6px; background: var(--violet); opacity: .85; border-radius: 3px; }
 .zone-risk { position: absolute; left: 0; width: 6px; background: var(--rust); opacity: .85; border-radius: 3px; }
 
+.live-dot { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; animation: ping 1.2s ease-out 1; }
+@keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(107,79,216,.6) } 100% { box-shadow: 0 0 0 8px rgba(107,79,216,0) } }
+.tick { transition: color .4s ease; }
+
 /* rows, checklists */
 .row { border-top: 1px solid var(--line); padding: 1rem 0; }
 .chk { display: flex; gap: .55rem; align-items: flex-start; font-size: .86rem; line-height: 1.35; }

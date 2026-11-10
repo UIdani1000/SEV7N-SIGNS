@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { SCALP_STATS, ScalpView, Signal, Store, getScalp, fmtPrice, usd, PaperTrade } from "@/lib/signs";
-import { Ladder } from "./parts";
+import { Ladder, LiveTag } from "./parts";
+import { usePrices } from "@/lib/usePrices";
 
 const MK = [["BTCUSDT", "BTC"], ["ETHUSDT", "ETH"], ["SOLUSDT", "SOL"], ["XRPUSDT", "XRP"], ["GOLD", "Gold"]];
 
@@ -35,6 +36,8 @@ export default function HighRisk({ store, setStore, toast }: { store: Store; set
   }, [endAt, sym]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (endAt && now >= endAt) { setEndAt(null); toast("Session finished. Results keep updating in Paper."); } }, [now, endAt, toast]);
   const left = endAt ? Math.max(0, endAt - now) : 0;
+  const live = usePrices(endAt ? [sym] : [], 5000);
+  const px = live.prices[sym]?.price ?? view?.price;
   const setup = view?.sides.find(s => s.setup)?.setup;
   return (
     <section className="max-w-3xl mx-auto px-5 pt-6 pb-32">
@@ -51,12 +54,13 @@ export default function HighRisk({ store, setStore, toast }: { store: Store; set
       {endAt && <div className="mt-6">
         <div className="flex items-center justify-between"><div className="display text-6xl num">{String(Math.floor(left / 60000)).padStart(2, "0")}:{String(Math.floor(left / 1000) % 60).padStart(2, "0")}</div>
           <button className="btn btn-ghost" onClick={() => setEndAt(null)}>End session</button></div>
-        <p className="text-sm muted">Watching {sym === "GOLD" ? "gold" : sym.replace("USDT", "")} on 5-minute candles. Checks every minute{view ? `; price ${fmtPrice(view.price)}` : ""}.</p>
+        <p className="text-sm muted">Watching {sym === "GOLD" ? "gold" : sym.replace("USDT", "")} on 5-minute candles. Checks every minute{px ? `; price ${fmtPrice(px)}` : ""}.</p>
+        <LiveTag at={live.at} stale={live.stale} />
         {err && <p className="text-sm mt-2" style={{ color: "var(--rust)" }}>{err}</p>}
         {setup && <div className="row mt-4 grid grid-cols-[1fr_1fr] gap-5">
           <div><span className={`pill ${setup.side === "long" ? "pill-long" : "pill-short"}`}>{setup.side === "long" ? "Buy" : "Sell"} now</span>
             <p className="mt-2 text-sm">Close by <b>{new Date(setup.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> if neither level hits.</p></div>
-          <Ladder sig={setup as unknown as Signal} price={view?.price} height={130} /></div>}
+          <Ladder sig={setup as unknown as Signal} price={px} height={130} /></div>}
         {view && view.sides.map(s => <div key={s.side} className="row">
           <div className="flex justify-between"><span className="font-semibold">{s.side === "long" ? "Buy" : "Sell"} checklist</span><span className="num text-sm">{s.met} of {s.total}</span></div>
           <div className="grid gap-1.5 mt-2">{s.checks.map(c => <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>)}</div>

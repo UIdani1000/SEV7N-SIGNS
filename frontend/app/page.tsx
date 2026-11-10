@@ -1,7 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Mark from "@/components/signs/Mark";
-import { Ladder, NearRow, SignalRow } from "@/components/signs/parts";
+import { Ladder, LiveTag, NearRow, SignalRow } from "@/components/signs/parts";
+import { usePrices } from "@/lib/usePrices";
 import SignalSheet from "@/components/signs/SignalSheet";
 import Paper from "@/components/signs/Paper";
 import Ask from "@/components/signs/Ask";
@@ -75,6 +76,8 @@ export default function Home() {
   };
 
   const pick = weekly?.pick;
+  const live = usePrices(view === "deck" && pick ? [pick.symbol] : []);
+  const pickPrice = pick ? (live.prices[pick.symbol]?.price ?? pick.price ?? null) : null;
   const pickPlan = pick ? plan(pick, store.balance, store.riskPct) : null;
   const statusLine: Record<string, string> = { active: "Active this week", stopped: "Stopped out this week", target_hit: "Target hit this week" };
 
@@ -103,7 +106,7 @@ export default function Home() {
             <h1 className="display text-[26vw] lg:text-[11rem] leading-none">{pick.ticker}</h1>
             <p className="mt-3 text-[1.05rem] max-w-prose">Weekly Trend says <b>buy {pick.name}</b>. {statusLine[pick.status || "active"]}{pick.status === "active" ? `; exit by ${new Date(weekly!.next_scan).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}.` : "."}</p>
             <div className="grid sm:grid-cols-[1fr_1fr] gap-8 mt-7 items-start">
-              <Ladder sig={pick} price={pick.price ?? null} height={230} />
+              <div><Ladder sig={pick} price={pickPrice} height={230} /><div className="mt-9"><LiveTag at={live.at} stale={live.stale} /></div></div>
               <div className="num grid gap-3 content-start">
                 <div><div className="text-sm muted">Size on {usd(store.balance)} at {store.riskPct}%</div><div className="font-semibold text-lg">{pickPlan.unitLabel}</div>
                   {pickPlan.warnings[0] && <p className="text-sm mt-1" style={{ color: "var(--rust)" }}>{pickPlan.warnings[0]}</p>}</div>

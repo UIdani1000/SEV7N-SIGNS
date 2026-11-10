@@ -23,6 +23,16 @@ def weekly_route():
     return jsonify(S.weekly_scan())
 
 
+@api.get("/prices")
+def prices_route():
+    syms = [x for x in request.args.get("symbols", "").split(",") if x in S.MARKETS][:25]
+    if not syms:
+        return jsonify({"error": "Pass symbols=BTCUSDT,GOLD,..."}), 400
+    resp = jsonify({"prices": S.live_prices(syms), "at": S._now().isoformat()})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @api.get("/markets")
 def markets_route():
     return jsonify([{"symbol": m, "ticker": S.TICKERS[m], "name": S.NAMES[m], "major": m in S.MAJORS} for m in S.MARKETS])

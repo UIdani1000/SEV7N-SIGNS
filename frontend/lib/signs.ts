@@ -18,7 +18,7 @@ export interface PaperTrade extends Signal { opened_at: string; risk_usd: number
 async function call<T>(path: string, init?: RequestInit, timeoutMs = 90000): Promise<T> {
   const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${API}${path}`, { ...init, signal: ctl.signal, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+    const res = await fetch(`${API}${path}`, { cache: "no-store", ...init, signal: ctl.signal, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Server answered ${res.status}`);
     return data as T;
@@ -125,3 +125,7 @@ export const PROP_ODDS = [
   { plan: "Squeeze only, 1% / 0.75%", pass: 24, days: 78, perAttempt: 15600, payout: 44 },
 ];
 export function money(cur: string, x: number) { return `${x < 0 ? "−" : ""}${cur}${Math.abs(Math.round(x)).toLocaleString()}`; }
+
+// ---------- live prices
+export type PriceMap = Record<string, { price: number; change_24h_pct: number | null }>;
+export const getPrices = (symbols: string[]) => call<{ prices: PriceMap; at: string }>(`/api/prices?symbols=${symbols.join(",")}`, undefined, 15000);

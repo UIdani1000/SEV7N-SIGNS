@@ -117,3 +117,15 @@ def test_lab_engine_on_synthetic(monkeypatch):
     import pytest
     with pytest.raises(lab.RuleError):
         lab.validate({**rules, "timeframe": "1h", "long": [{"type": "candle", "pattern": "dragon"}]})
+
+def test_live_prices(monkeypatch, client):
+    calls = []
+    def fake_ticker(sym, cat="spot"):
+        calls.append((sym, cat))
+        if sym == "XAUTUSDT": raise ValueError("down")
+        return {"price": 4000.0 if sym == "PAXGUSDT" else 70000.0, "change_24h_pct": 1.5}
+    monkeypatch.setattr(S, "_bybit_ticker", fake_ticker); S._price_cache.clear()
+    d = client.get("/api/prices?symbols=BTCUSDT,GOLD,NOPE").get_json()
+    assert set(d["prices"]) == {"BTCUSDT", "GOLD"} and d["prices"]["GOLD"]["price"] == 4000.0   # gold fell back to PAXG
+    n = len(calls); client.get("/api/prices?symbols=BTCUSDT"); assert len(calls) == n           # served from the 5s cache
+    assert client.get("/api/prices?symbols=NOPE").status_code == 400

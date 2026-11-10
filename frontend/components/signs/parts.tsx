@@ -2,6 +2,17 @@
 import { useEffect, useState } from "react";
 import { Signal, Near, fmtPrice, getCandles } from "@/lib/signs";
 
+/** Small "Live" tag: a dot that pulses after each update, and how long ago it was. */
+export function LiveTag({ at, stale }: { at: number | null; stale: boolean }) {
+  const [, force] = useState(0);
+  useEffect(() => { const id = setInterval(() => force(x => x + 1), 1000); return () => clearInterval(id); }, []);
+  if (!at) return <span className="text-xs muted">Connecting to live prices…</span>;
+  const sec = Math.max(0, Math.round((Date.now() - at) / 1000));
+  return <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: stale ? "var(--rust)" : "var(--stone)" }} aria-live="off">
+    <span key={at} className="live-dot" style={{ background: stale ? "var(--rust)" : "var(--violet)" }} />
+    {stale ? `Live prices paused, last update ${sec}s ago` : `Live, updated ${sec < 2 ? "just now" : `${sec}s ago`}`}</span>;
+}
+
 /** The price ladder: stop, entry and target as rungs, with the live price pinned between them. */
 export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry" | "sl" | "tp" | "side">; price?: number | null; height?: number }) {
   const top = sig.side === "long" ? sig.tp : sig.sl, bottom = sig.side === "long" ? sig.sl : sig.tp;
