@@ -1,71 +1,76 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { SCALP_STATS, ScalpView, Signal, Store, getScalp, fmtPrice, usd, PaperTrade } from "@/lib/signs";
-import { Ladder, LiveTag } from "./parts";
+import { useEffect, useState } from "react";
+import { SCALP_STATS, Signal, Store, fmtPrice, usd } from "@/lib/signs";
+import { HighRiskCtl, tickerOf } from "@/lib/highrisk";
 import { usePrices } from "@/lib/usePrices";
+import { unlockSound } from "@/lib/alerts";
+import { Ladder, LiveTag } from "./parts";
 
-const MK = [["BTCUSDT", "BTC"], ["ETHUSDT", "ETH"], ["SOLUSDT", "SOL"], ["XRPUSDT", "XRP"], ["GOLD", "Gold"]];
+const MK = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "GOLD"];
+export const clock = (ms: number) => `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
 
-export default function HighRisk({ store, setStore, toast }: { store: Store; setStore: (s: Store) => void; toast: (m: string) => void }) {
-  const [sym, setSym] = useState("BTCUSDT"); const [mins, setMins] = useState(60); const [auto, setAuto] = useState(true);
-  const [endAt, setEndAt] = useState<number | null>(null); const [now, setNow] = useState(Date.now());
-  const [view, setView] = useState<ScalpView | null>(null); const [err, setErr] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
-  const storeRef = useRef(store); storeRef.current = store;
+export default function HighRisk({ store, hr, openSettings }: { store: Store; hr: HighRiskCtl; openSettings: () => void }) {
+  const [pick, setPick] = useState<string[]>(["BTCUSDT"]); const [mins, setMins] = useState(60); const [auto, setAuto] = useState(true);
+  const [now, setNow] = useState(Date.now()); const [tab, setTab] = useState<string | null>(null);
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const s = hr.session; const syms = s ? s.symbols : pick;
+  const live = usePrices(s ? s.symbols : [], 5000);
+  const active = tab && syms.includes(tab) ? tab : syms[0];
+  const v = hr.views[active];
   const risk = Math.min(store.riskPct, 2) / 100 * store.balance;
-  const tick = async () => {
-    try {
-      const v = await getScalp(sym); setView(v); setErr(null);
-      for (const s of v.sides) if (s.setup) {
-        const id = s.setup.id;
-        if (auto && !storeRef.current.paper.some(t => t.id === id)) {
-          const t = { ...s.setup, ticker: sym === "GOLD" ? "XAUUSD" : sym.replace("USDT", ""), name: sym, reasons: s.checks.map(c => c.label), risk_pct_of_price: 0,
-            stats: { name: "High Risk scalp", win_rate: SCALP_STATS.win_rate, avg_r: SCALP_STATS.avg_r, per_week: "", years_positive: "0 of 3", worst_losing_streak: 0, hold: "60 min", max_risk_hint: 2 },
-            opened_at: new Date().toISOString(), risk_usd: risk } as unknown as PaperTrade;
-          setStore({ ...storeRef.current, paper: [...storeRef.current.paper, t] });
-          toast(`Scalp paper trade opened: ${s.side === "long" ? "buy" : "sell"} ${sym.replace("USDT", "")}.`);
-          setLog(l => [`${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ${s.side === "long" ? "Buy" : "Sell"} at ${fmtPrice(s.setup!.entry)}, close by ${new Date(s.setup!.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, ...l]);
-        }
-      }
-    } catch (e: unknown) { setErr((e as Error).message); }
+  const toggle = (m: string) => {
+    const next = syms.includes(m) ? syms.filter(x => x !== m) : [...syms, m];
+    if (!next.length) return;
+    if (s) hr.setSymbols(next); else setPick(next);
+    if (!syms.includes(m)) setTab(m);
   };
-  useEffect(() => {
-    if (!endAt) return;
-    tick(); const poll = setInterval(tick, 60000); const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => { clearInterval(poll); clearInterval(clock); };
-  }, [endAt, sym]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (endAt && now >= endAt) { setEndAt(null); toast("Session finished. Results keep updating in Paper."); } }, [now, endAt, toast]);
-  const left = endAt ? Math.max(0, endAt - now) : 0;
-  const live = usePrices(endAt ? [sym] : [], 5000);
-  const px = live.prices[sym]?.price ?? view?.price;
-  const setup = view?.sides.find(s => s.setup)?.setup;
+  const setupOf = (sym: string) => hr.views[sym]?.sides?.find(x => x.setup)?.setup;
+  const cur = v?.sides?.find(x => x.setup)?.setup;
   return (
-    <section className="max-w-3xl mx-auto px-5 pt-6 pb-32">
-      <h1 className="display text-7xl" style={{ color: "var(--rust)" }}>High Risk Mode</h1>
-      <div className="rounded-2xl p-4 mt-4" style={{ background: "var(--rust)", color: "#fff" }} role="note">
-        <b>Paper only.</b> These 5-minute scalps were tested on {SCALP_STATS.years} years of BTC, ETH and gold: {SCALP_STATS.win_rate}% wins and {SCALP_STATS.avg_r}R per scalp after spreads ({SCALP_STATS.scalps.toLocaleString()} scalps). That is about −${Math.abs(SCALP_STATS.avg_r * 10).toFixed(2)} per 10 scalps risking $1. Use it to practise, not to earn.
+    <section className="max-w-3xl mx-auto px-5 pt-6 pb-40">
+      <h1 className="display text-6xl sm:text-7xl" style={{ color: "var(--rust)" }}>High Risk Mode</h1>
+      <div className="rounded-2xl p-4 mt-4 text-sm" style={{ background: "var(--rust)", color: "#fff" }} role="note">
+        <b>Paper only.</b> Tested on {SCALP_STATS.years} years of BTC, ETH and gold: {SCALP_STATS.win_rate}% wins, {SCALP_STATS.avg_r}R per scalp after spreads. About −${Math.abs(SCALP_STATS.avg_r * 10).toFixed(2)} per 10 scalps risking $1.
       </div>
-      {!endAt && <div className="mt-6 grid gap-4">
-        <div className="text-sm font-semibold">Market<div className="flex flex-wrap gap-2 mt-1">{MK.map(([s, l]) => <button key={s} className={`pill !py-2 !px-4 ${sym === s ? "pill-short" : ""}`} onClick={() => setSym(s)}>{l}</button>)}</div></div>
-        <div className="text-sm font-semibold">Session length<div className="flex gap-2 mt-1">{[30, 60, 120].map(m => <button key={m} className={`pill !py-2 !px-4 ${mins === m ? "pill-short" : ""}`} onClick={() => setMins(m)}>{m} min</button>)}</div></div>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> Paper-trade every setup automatically (risk {usd(risk)}, capped at 2%)</label>
-        <button className="btn btn-ink" onClick={() => { setLog([]); setView(null); setEndAt(Date.now() + mins * 60000); }}>Start {mins}-minute session</button>
+
+      <div className="mt-6 text-sm font-semibold">{s ? "Watching (tap to add or remove)" : "Markets to watch"}</div>
+      <div className="flex flex-wrap gap-2 mt-2">{MK.map(m => {
+        const on = syms.includes(m), hot = !!setupOf(m);
+        return <button key={m} aria-pressed={on} className={`pill !py-2 !px-4 relative ${on ? "pill-short" : ""}`} onClick={() => toggle(m)}>{tickerOf(m)}
+          {hot && <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full" style={{ background: "var(--rust)" }} aria-label="entry now" />}</button>;
+      })}</div>
+
+      {!s && <div className="mt-5 grid gap-4">
+        <div className="text-sm font-semibold">Session length<div className="flex gap-2 mt-2">{[30, 60, 120, 240].map(m => <button key={m} className={`pill !py-2 !px-4 ${mins === m ? "pill-short" : ""}`} onClick={() => setMins(m)}>{m < 60 ? `${m} min` : `${m / 60} h`}</button>)}</div></div>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={auto} onChange={e => setAuto(e.target.checked)} /> Paper-trade every entry automatically (risk {usd(risk)}, capped at 2%)</label>
+        <button className="btn btn-ink" onClick={() => { unlockSound(); hr.start(pick, mins, auto); }}>Start {mins < 60 ? `${mins}-minute` : `${mins / 60}-hour`} session</button>
+        <p className="text-xs muted">The session keeps running if you switch screens or close the app. With Telegram connected, entries are sent there too. <button className="underline" onClick={openSettings}>Alert settings</button></p>
       </div>}
-      {endAt && <div className="mt-6">
-        <div className="flex items-center justify-between"><div className="display text-6xl num">{String(Math.floor(left / 60000)).padStart(2, "0")}:{String(Math.floor(left / 1000) % 60).padStart(2, "0")}</div>
-          <button className="btn btn-ghost" onClick={() => setEndAt(null)}>End session</button></div>
-        <p className="text-sm muted">Watching {sym === "GOLD" ? "gold" : sym.replace("USDT", "")} on 5-minute candles. Checks every minute{px ? `; price ${fmtPrice(px)}` : ""}.</p>
-        <LiveTag at={live.at} stale={live.stale} />
-        {err && <p className="text-sm mt-2" style={{ color: "var(--rust)" }}>{err}</p>}
-        {setup && <div className="row mt-4 grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
-          <div><span className={`pill ${setup.side === "long" ? "pill-long" : "pill-short"}`}>{setup.side === "long" ? "Buy" : "Sell"} now</span>
-            <p className="mt-2 text-sm">Close by <b>{new Date(setup.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> if neither level hits.</p></div>
-          <Ladder sig={setup as unknown as Signal} price={px} height={130} /></div>}
-        {view && view.sides.map(s => <div key={s.side} className="row">
-          <div className="flex justify-between"><span className="font-semibold">{s.side === "long" ? "Buy" : "Sell"} checklist</span><span className="num text-sm">{s.met} of {s.total}</span></div>
-          <div className="grid gap-1.5 mt-2">{s.checks.map(c => <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>)}</div>
+
+      {s && <div className="mt-6">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="display text-6xl num">{clock(Math.max(0, s.endAt - now))}</div>
+          <div className="flex gap-2"><button className="btn btn-ghost !py-2" onClick={() => hr.extend(30)}>+30 min</button><button className="btn btn-ghost !py-2" onClick={hr.stop}>End</button></div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm">
+          <LiveTag at={live.at} stale={live.stale} />
+          <label className="flex items-center gap-2"><input type="checkbox" checked={s.auto} onChange={e => hr.setAuto(e.target.checked)} /> Auto paper-trade</label>
+          <span className="muted">{hr.server?.active ? (hr.server.telegram ? "Telegram alerts on while you’re away" : "Connect Telegram to get alerts when the app is closed") : "Connecting the server watcher…"}</span>
+        </div>
+
+        {syms.length > 1 && <div className="flex gap-2 mt-5 overflow-x-auto" role="tablist">{syms.map(m => <button key={m} role="tab" aria-selected={m === active} className={`pill !py-1.5 shrink-0 ${m === active ? "pill-short" : ""}`} onClick={() => setTab(m)}>{tickerOf(m)}{setupOf(m) ? " 🚨" : ""}</button>)}</div>}
+        <p className="text-sm mt-3 num"><b>{tickerOf(active)}</b> {live.prices[active] ? fmtPrice(live.prices[active].price) : v ? fmtPrice(v.price) : "…"} on 5-minute candles</p>
+        {v?.error && <p className="text-sm mt-1" style={{ color: "var(--rust)" }}>{v.error}</p>}
+        {cur && <div className="row mt-3 grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
+          <div><span className={`pill ${cur.side === "long" ? "pill-long" : "pill-short"}`}>{cur.side === "long" ? "Buy" : "Sell"} now</span>
+            <p className="mt-2 text-sm">Close by <b>{new Date(cur.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> if neither level hits.</p></div>
+          <Ladder sig={cur as unknown as Signal} price={live.prices[active]?.price ?? v?.price} height={130} /></div>}
+        {v?.sides?.map(x => <div key={x.side} className="row">
+          <div className="flex justify-between"><span className="font-semibold">{x.side === "long" ? "Buy" : "Sell"} checklist</span><span className="num text-sm">{x.met} of {x.total}</span></div>
+          <div className="grid gap-1.5 mt-2">{x.checks.map(c => <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>)}</div>
         </div>)}
-        {log.length > 0 && <div className="mt-4"><div className="font-semibold text-sm">This session</div>{log.map(l => <p key={l} className="text-sm num mt-1">{l}</p>)}</div>}
+        {!v && <p className="muted text-sm mt-3">Reading {tickerOf(active)}…</p>}
+        {hr.log.length > 0 && <div className="mt-5"><div className="font-semibold text-sm">Entries this session</div>{hr.log.map(l => <p key={l.at + l.text} className="text-sm num mt-1">{new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} {l.text}</p>)}</div>}
       </div>}
     </section>
   );

@@ -62,7 +62,9 @@ export function usd(x: number) { return `$${x.toFixed(x < 10 ? 2 : 0)}`; }
 
 // ---------- storage
 const KEY = "sev7n-signs-v1";
-export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number; pair?: string; prop?: PropState; updatedAt?: number }
+export interface Store { balance: number; riskPct: number; paper: PaperTrade[]; startBalance: number; pair?: string; prop?: PropState; updatedAt?: number; alerts?: AlertPrefs }
+export interface AlertPrefs { sound: boolean; push: boolean; swing: boolean }
+export const ALERT_DEFAULTS: AlertPrefs = { sound: true, push: true, swing: true };
 export const DEFAULTS: Store = { balance: 25, riskPct: 6, paper: [], startBalance: 25 };
 export function load(): Store { try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); return s ? { ...DEFAULTS, ...s } : DEFAULTS; } catch { return DEFAULTS; } }
 export function save(s: Store) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage full or blocked */ } }
@@ -135,3 +137,8 @@ export const MARKET_LIST: [string, string, string][] = [["BTCUSDT", "BTC", "Bitc
   ["BNBUSDT", "BNB", "BNB"], ["ADAUSDT", "ADA", "Cardano"], ["DOGEUSDT", "DOGE", "Dogecoin"], ["AVAXUSDT", "AVAX", "Avalanche"], ["LINKUSDT", "LINK", "Chainlink"], ["DOTUSDT", "DOT", "Polkadot"],
   ["LTCUSDT", "LTC", "Litecoin"], ["TRXUSDT", "TRX", "TRON"], ["ATOMUSDT", "ATOM", "Cosmos"], ["NEARUSDT", "NEAR", "NEAR"], ["UNIUSDT", "UNI", "Uniswap"], ["BCHUSDT", "BCH", "Bitcoin Cash"],
   ["XLMUSDT", "XLM", "Stellar"], ["ETCUSDT", "ETC", "Ethereum Classic"], ["FILUSDT", "FIL", "Filecoin"], ["AAVEUSDT", "AAVE", "Aave"]];
+
+export const getScalpMany = (symbols: string[]) => call<{ markets: (ScalpView & { error?: string })[] }>(`/api/scalp?symbols=${symbols.join(",")}`, undefined, 45000);
+export const setServerSession = (symbols: string[], end_at: string) => call<{ active: boolean; telegram: boolean }>("/api/alerts/session", { method: "POST", body: JSON.stringify({ symbols, end_at }) });
+export const stopServerSession = () => call<{ active: boolean }>("/api/alerts/session", { method: "DELETE" });
+export const sendSirenToTelegram = () => call<{ ok: boolean; error?: string }>("/api/telegram/siren", { method: "POST" }, 30000);

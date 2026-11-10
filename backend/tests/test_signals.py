@@ -138,3 +138,23 @@ def test_trade_status_ignores_prices_before_open(monkeypatch):
     monkeypatch.setattr(S, "_now", lambda: pd.Timestamp("2026-03-02 16:20", tz="UTC").to_pydatetime())
     st = S.trade_status({"symbol": "BTCUSDT", "side": "long", "entry": 100, "sl": 98, "tp": 106, "opened_at": "2026-03-02T16:07:00Z"})
     assert st["status"] == "open"
+
+def test_alert_session_and_batch_scalp(monkeypatch, client):
+    import alerts, scalp as SC
+    def fake(symbol, tf, limit=300, include_live=False):
+        freq = {"5m": "5min", "15m": "15min", "1h": "1h", "4h": "4h", "1d": "1D"}[tf]
+        end = pd.Timestamp.now(tz="UTC").floor(freq)
+        return make(400, freq, start=end - pd.Timedelta(freq) * 399, seed=3).iloc[-limit:]
+    monkeypatch.setattr(S, "fetch_candles", fake)
+    d = client.get("/api/scalp?symbols=BTCUSDT,ETHUSDT").get_json()
+    assert [m["symbol"] for m in d["markets"]] == ["BTCUSDT", "ETHUSDT"]
+    monkeypatch.setattr(alerts, "_loop", lambda: None)            # don't start the real watcher in tests
+    end = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(minutes=30)).isoformat()
+    st = client.post("/api/alerts/session", json={"symbols": ["BTCUSDT", "DOGEUSDT"], "end_at": end}).get_json()
+    assert st["active"] and st["session"]["symbols"] == ["BTCUSDT"]
+    sent = []; monkeypatch.setattr(alerts, "_send", sent.append)
+    monkeypatch.setattr(SC, "live", lambda s, f: {"sides": [{"setup": {"id": "x1", "side": "long", "entry": 100.0, "sl": 99.0, "tp": 101.5, "rr": 1.5, "expires": "2026-01-01T10:00:00+00:00"}}]})
+    alerts.STATE["sent"].clear(); alerts.check_once(); alerts.check_once()
+    assert len(sent) == 1 and "HIGH RISK" in sent[0]                   # sent once, not repeated
+    assert client.delete("/api/alerts/session").get_json()["active"] is False
+    assert client.post("/api/alerts/session", json={"symbols": ["BTCUSDT"], "end_at": "2020-01-01T00:00:00Z"}).status_code == 400

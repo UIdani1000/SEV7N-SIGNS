@@ -15,6 +15,9 @@ import Account from "@/components/signs/Account";
 import Tools, { ToolView } from "@/components/signs/Tools";
 import type { User } from "firebase/auth";
 import { listen, merge, pull, push, watchUser } from "@/lib/sync";
+import { useHighRisk, useSignalWatch } from "@/lib/highrisk";
+import { registerSW, unlockSound } from "@/lib/alerts";
+import SessionBar from "@/components/signs/SessionBar";
 import { DEFAULTS, ScanResult, Signal, Store, Weekly, getWeekly, load, plan, runScan, save, stamp, usd } from "@/lib/signs";
 
 type View = "deck" | "markets" | "paper" | "ask" | ToolView;
@@ -50,6 +53,13 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null); const [syncedAt, setSyncedAt] = useState<number | null>(null);
   const storeRef = useRef<Store>(DEFAULTS); const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => { const s = load(); storeRef.current = s; setStoreState(s); }, []);
+  useEffect(() => {   // service worker for notifications; first tap anywhere unlocks the siren on phones
+    registerSW();
+    const once = () => unlockSound(); window.addEventListener("pointerdown", once, { once: true });
+    const onMsg = (e: MessageEvent) => { if (e.data?.type === "open") window.focus(); };
+    navigator.serviceWorker?.addEventListener("message", onMsg);
+    return () => { window.removeEventListener("pointerdown", once); navigator.serviceWorker?.removeEventListener("message", onMsg); };
+  }, []);
   const apply = useCallback((s: Store) => { storeRef.current = s; setStoreState(s); save(s); }, []);
   const setStore = (s0: Store) => {
     const s = stamp(s0); apply(s);
@@ -78,6 +88,8 @@ export default function Home() {
   const pick = weekly?.pick;
   const live = usePrices(view === "deck" && pick ? [pick.symbol] : []);
   const pickPrice = pick ? (live.prices[pick.symbol]?.price ?? pick.price ?? null) : null;
+  const hr = useHighRisk(store, setStore, toast);
+  useSignalWatch(store, toast);
   const pickPlan = pick ? plan(pick, store.balance, store.riskPct) : null;
   const statusLine: Record<string, string> = { active: "Active this week", stopped: "Stopped out this week", target_hit: "Target hit this week" };
 
@@ -152,7 +164,8 @@ export default function Home() {
       {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} signedIn={!!user} onSignIn={() => setView("sync")} />}
       {view === "prop" && <Prop store={store} setStore={setStore} toast={toast} />}
       {view === "lab" && <Lab store={store} />}
-      {view === "highrisk" && <HighRisk store={store} setStore={setStore} toast={toast} />}
+      {view === "highrisk" && <HighRisk store={store} hr={hr} openSettings={() => setSettings(true)} />}
+      {view !== "highrisk" && <SessionBar hr={hr} onOpen={() => setView("highrisk")} />}
       {view === "sync" && <Account user={user} syncedAt={syncedAt} toast={toast} trades={store.paper.length} />}
       {view === "ask" && <Ask />}
 

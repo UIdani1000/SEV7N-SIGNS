@@ -52,6 +52,14 @@ body { font-family: var(--font-body), system-ui, sans-serif; -webkit-font-smooth
 @keyframes ping { 0% { box-shadow: 0 0 0 0 rgba(107,79,216,.6) } 100% { box-shadow: 0 0 0 8px rgba(107,79,216,0) } }
 .tick { transition: color .4s ease; }
 
+.session-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(5.1rem + env(safe-area-inset-bottom)); z-index: 45;
+  display: flex; align-items: center; gap: .75rem; max-width: calc(100vw - 1.5rem); padding: .6rem 1.1rem; border-radius: 999px;
+  background: var(--rust); color: #fff; font-size: .82rem; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+.session-bar.hot { animation: hotpulse 1.4s ease-in-out infinite; }
+@keyframes hotpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(196,83,58,.7) } 50% { box-shadow: 0 0 0 10px rgba(196,83,58,0) } }
+@media (min-width: 768px) { .session-bar { bottom: 1.25rem; } }
+@media (prefers-reduced-motion: reduce) { .session-bar.hot { animation: none; outline: 3px solid #fff; } }
+
 /* rows, checklists */
 .row { border-top: 1px solid var(--line); padding: 1rem 0; }
 .chk { display: flex; gap: .55rem; align-items: flex-start; font-size: .86rem; line-height: 1.35; }

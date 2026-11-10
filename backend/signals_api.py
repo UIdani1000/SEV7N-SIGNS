@@ -52,13 +52,56 @@ def market_route():
 @api.get("/scalp")
 def scalp_route():
     import scalp as SC
-    sym = request.args.get("symbol", "BTCUSDT")
-    if sym not in SC.SCALP_MARKETS:
-        return jsonify({"error": f"High Risk Mode supports {', '.join(SC.SCALP_MARKETS)}"}), 400
+    many = request.args.get("symbols")
+    syms = many.split(",") if many else [request.args.get("symbol", "BTCUSDT")]
+    bad = [x for x in syms if x not in SC.SCALP_MARKETS]
+    if bad or not syms or len(syms) > 5:
+        return jsonify({"error": f"High Risk Mode supports up to 5 of {', '.join(SC.SCALP_MARKETS)}"}), 400
+    def one(x):
+        try: return SC.live(x, lambda s, tf, n: S.fetch_candles(s, tf, n))
+        except Exception as e: return {"symbol": x, "error": f"Could not read {x}: {str(e)[:120]}"}
+    if not many:
+        r = one(syms[0])
+        return (jsonify(r), 502) if "error" in r else jsonify(r)
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        return jsonify({"markets": list(pool.map(one, syms))})
+
+
+@api.get("/alerts/session")
+def alerts_status():
+    import alerts
+    return jsonify(alerts.status())
+
+
+@api.post("/alerts/session")
+def alerts_start():
+    import alerts
+    b = request.get_json(silent=True) or {}
     try:
-        return jsonify(SC.live(sym, lambda s, tf, n: S.fetch_candles(s, tf, n)))
-    except Exception as e:
-        return jsonify({"error": f"Could not read {sym}: {str(e)[:160]}"}), 502
+        return jsonify(alerts.set_session(b.get("symbols") or [], b.get("end_at") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@api.delete("/alerts/session")
+def alerts_stop():
+    import alerts
+    return jsonify(alerts.clear_session())
+
+
+@api.post("/telegram/siren")
+def telegram_siren():
+    token, chat = os.environ.get("TELEGRAM_BOT_TOKEN"), os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        return jsonify({"ok": False, "error": "Connect Telegram first (bot token and chat ID in Render)."}), 400
+    path = os.path.join(os.path.dirname(__file__), "static", "siren.mp3")
+    cap = ("SEV7N siren. To hear it for alerts: open this audio's menu and choose 'Save for notifications'. "
+           "Then open this chat's name, Notifications, Sound, and pick it.")
+    with open(path, "rb") as f:
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendAudio", data={"chat_id": chat, "caption": cap, "title": "SEV7N siren"},
+                          files={"audio": ("sev7n-siren.mp3", f, "audio/mpeg")}, timeout=30).json()
+    return (jsonify({"ok": True}) if r.get("ok") else (jsonify({"ok": False, "error": r.get("description")}), 502))
 
 
 @api.post("/lab/parse")
@@ -168,7 +211,7 @@ def _tg(method, **params):
 
 def _fmt(sig):
     arrow = "BUY" if sig["side"] == "long" else "SELL"
-    return (f"SEV7N SIGNS | {sig['strategy_name']}\n{arrow} {sig['ticker']} ({sig['name']})\n"
+    return (f"🚨 SEV7N SIGNS | {sig['strategy_name']}\n{arrow} {sig['ticker']} ({sig['name']})\n"
             f"Entry {sig['entry']}\nStop {sig['sl']}\nTarget {sig['tp']} (1:{sig['rr']:g})\n"
             f"Valid until {sig['expires'][:16].replace('T', ' ')} UTC\nPaper-trade first. Not financial advice.")
 
