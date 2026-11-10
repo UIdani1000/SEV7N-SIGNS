@@ -25,8 +25,11 @@ export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry"
           <span className="lvl">{fmtPrice(r.v)}</span>
         </div>
       ))}
+      {price != null && isFinite(price) && <div className="price-pin" style={{ top: `${y(price)}%` }} />}
       {price != null && isFinite(price) && (
-        <div className="price-pin" style={{ top: `${y(price)}%` }}><span>Now {fmtPrice(price)}</span></div>
+        <div className="absolute left-3 text-xs num" style={{ top: `calc(100% + 0.9rem)` }}>
+          Now <b>{fmtPrice(price)}</b>, {(() => { const r = (price - sig.entry) / Math.abs(sig.entry - sig.sl) * (sig.side === "long" ? 1 : -1); return `${r >= 0 ? "+" : ""}${r.toFixed(2)}R from entry`; })()}
+        </div>
       )}
     </div>
   );

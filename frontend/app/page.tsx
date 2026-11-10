@@ -80,7 +80,8 @@ export default function Home() {
             <div className="grid sm:grid-cols-[1fr_1fr] gap-8 mt-7 items-start">
               <Ladder sig={pick} price={pick.price ?? null} height={230} />
               <div className="num grid gap-3 content-start">
-                <div><div className="text-sm muted">Size on {usd(store.balance)} at {store.riskPct}%</div><div className="font-semibold text-lg">{pickPlan.unitLabel}</div></div>
+                <div><div className="text-sm muted">Size on {usd(store.balance)} at {store.riskPct}%</div><div className="font-semibold text-lg">{pickPlan.unitLabel}</div>
+                  {pickPlan.warnings[0] && <p className="text-sm mt-1" style={{ color: "var(--rust)" }}>{pickPlan.warnings[0]}</p>}</div>
                 <div className="flex gap-6"><div><div className="text-sm muted">Risk</div><div className="font-semibold" style={{ color: "var(--rust)" }}>−{usd(pickPlan.riskUsd)}</div></div>
                   <div><div className="text-sm muted">Target</div><div className="font-semibold" style={{ color: "var(--violet)" }}>+{usd(pickPlan.targetUsd)}</div></div></div>
                 <button className="btn btn-ink mt-2" onClick={() => setOpen(pick)}>Open the plan</button>
@@ -100,6 +101,15 @@ export default function Home() {
         {/* SCAN */}
         <section aria-label="Scan markets">
           <ScanBlock scan={longScan} title="Scan markets" sub="Runs every strategy on 20 markets and shows what is ready, and what is close." onOpen={setOpen} />
+          <div className="mt-10">
+            <p className="text-sm font-semibold">What the scan runs</p>
+            {[["Weekly Trend", "Strongest weekly uptrend among BTC, ETH, SOL, XRP and gold. Picked every Monday.", "48% wins, +0.20R, about 1 a week"],
+              ["Squeeze Breakout", "A quiet 4h squeeze that breaks out in the direction of the daily trend.", "32% wins, +0.15R, about 1–2 a week"],
+              ["Trend Pullback", "Your EMA and MACD rules, one timeframe up: daily trend, 4h momentum, 1h entry.", "35% wins, +0.08R, about 3–5 a week"]].map(([n, d, st]) => (
+              <div key={n} className="row"><div className="flex justify-between gap-4"><span className="font-semibold">{n}</span><span className="text-xs muted num text-right">{st}</span></div>
+                <p className="text-sm muted mt-1">{d}</p></div>))}
+            <p className="text-xs muted mt-3">Records from 2020–2026 backtests at 1:3 with fees. R is the amount risked per trade.</p>
+          </div>
         </section>
       </div>}
 
@@ -138,7 +148,7 @@ function ScanBlock({ scan, title, sub, onOpen }: { scan: ReturnType<typeof useSc
       {err && <p className="mt-3 text-sm" style={{ color: "var(--rust)" }}>{err}</p>}
       {res && !busy && <div className="mt-6">
         <h2 className="font-semibold">{res.signals.length ? `Ready now (${res.signals.length})` : "Nothing is ready right now"}</h2>
-        {!res.signals.length && <p className="text-sm muted mt-1">That is normal: these strategies wait for clean setups. The closest ones are below.</p>}
+        {!res.signals.length && <p className="text-sm muted mt-1">{res.near.length ? "That is normal: these strategies wait for clean setups. The closest ones are below." : "No market is close yet either. The hourly scan will alert you on Telegram when one forms."}</p>}
         <div className="reveal">{res.signals.map(s => <SignalRow key={s.id} sig={s} onOpen={onOpen} />)}</div>
         {res.near.length > 0 && <><h2 className="font-semibold mt-6">Close to ready</h2>
           <div className="reveal">{res.near.map(n => <NearRow key={`${n.strategy}${n.symbol}${n.side}`} n={n} />)}</div></>}

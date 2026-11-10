@@ -48,8 +48,9 @@ export function plan(sig: Pick<Signal, "entry" | "sl" | "tp" | "symbol" | "rr" |
   const warnings: string[] = [];
   let unitLabel = `${fmtQty(units)} ${sig.symbol.replace("USDT", "")}`;
   if (sig.symbol === "GOLD") {
-    const lots = units / 100; unitLabel = `${lots.toFixed(3)} lots (${units.toFixed(2)} oz)`;
-    if (lots < 0.01) warnings.push(`Below the 0.01-lot minimum. At 0.01 lot your real risk is $${(perUnit * 1).toFixed(2)}.`);
+    const lots = units / 100;
+    unitLabel = lots >= 0.01 ? `${lots.toFixed(2)} lots (${units.toFixed(2)} oz)` : `${units.toFixed(3)} oz of gold`;
+    if (lots < 0.01) warnings.push(`Too small for a 0.01-lot CFD (1 oz), which would risk $${perUnit.toFixed(2)}. Use fractional gold (XAUT or PAXG on a crypto exchange) or a larger balance.`);
   } else if (notional < 5) warnings.push("Position is under $5, below most exchanges’ minimum order size.");
   if (riskPct > sig.stats.max_risk_hint) warnings.push(`${sig.stats.name} has had losing streaks of ${sig.stats.worst_losing_streak} trades. Above ${sig.stats.max_risk_hint}% risk, a streak like that can wipe out most of the account.`);
   if (notional > balance * 1.5) warnings.push(`Needs about ${(notional / Math.max(balance, 1)).toFixed(1)}x leverage on this balance.`);
