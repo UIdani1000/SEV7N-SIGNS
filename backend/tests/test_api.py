@@ -109,3 +109,50 @@ def test_cors_allows_dashboard_only(client):
     assert preview.headers.get("Access-Control-Allow-Origin")
     bad = client.get("/", headers={"Origin": "https://evil.example.com"})
     assert bad.headers.get("Access-Control-Allow-Origin") is None
+
+
+class _FakeModels:
+    """Stands in for gemini_client.models; fails for models listed in `failing`."""
+    def __init__(self, failing):
+        self.failing, self.calls = failing, []
+
+    def generate_content(self, model, contents, config):
+        self.calls.append(model)
+        if model in self.failing:
+            raise RuntimeError(f"503 UNAVAILABLE on {model}")
+        return type("R", (), {"text": f"answer from {model}"})()
+
+
+def _fake_client(failing):
+    return type("C", (), {"models": _FakeModels(failing)})()
+
+
+def test_gemini_falls_back_to_lighter_model(app_module, monkeypatch):
+    fake = _fake_client(failing={app_module.GEMINI_MODEL})
+    monkeypatch.setattr(app_module, "gemini_client", fake)
+    assert app_module.gemini_generate("hi") == f"answer from {app_module.GEMINI_FALLBACK_MODEL}"
+    assert fake.models.calls == [app_module.GEMINI_MODEL, app_module.GEMINI_FALLBACK_MODEL]
+
+
+def test_both_models_down_still_returns_signal(client, app_module, monkeypatch):
+    monkeypatch.setattr(app_module, "gemini_client",
+                        _fake_client(failing={app_module.GEMINI_MODEL, app_module.GEMINI_FALLBACK_MODEL}))
+    r = client.post("/run_ormcr_analysis", json=ANALYSIS_REQUEST)
+    assert r.status_code == 200
+    assert "AI commentary unavailable" in r.get_json()["next_step_for_user"]
+
+
+def test_market_data_is_cached(client, app_module, monkeypatch):
+    calls = []
+    original = app_module.bybit_client.get_kline
+    monkeypatch.setattr(app_module.bybit_client, "get_kline", lambda **kw: calls.append(1) or original(**kw))
+    client.get("/all_market_prices")
+    client.get("/all_market_prices")
+    client.post("/chat", json={"message": "hi"})  # 503 (no AI) but must not refetch either
+    assert len(calls) == 6  # one fetch per symbol, reused afterwards
+
+
+def test_gunicorn_timeout_allows_ai_fallback():
+    import runpy, os
+    cfg = runpy.run_path(os.path.join(os.path.dirname(__file__), "..", "gunicorn.conf.py"))
+    assert cfg["timeout"] >= 90

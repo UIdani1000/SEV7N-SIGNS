@@ -6,12 +6,15 @@ from dotenv import load_dotenv
 from pybit.unified_trading import HTTP
 import pandas as pd
 import indicators as ind
+from google import genai
+from google.genai import types as genai_types
 from datetime import datetime, timedelta
 import random
 import json
 import numpy as np
 import time
 import traceback
+import threading
 
 # Load environment variables from .env file
 load_dotenv()
@@ -39,12 +42,19 @@ print("--- Bybit public market-data client initialized (no API key) ---")
 # Set GEMINI_API_KEY in Render's environment settings. GEMINI_MODEL is optional.
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+GEMINI_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "25"))
 gemini_client = None
 if GEMINI_API_KEY:
     try:
-        from google import genai
-        from google.genai import types as genai_types
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            # Fail fast instead of letting the SDK retry past the web server's time limit.
+            http_options=genai_types.HttpOptions(
+                timeout=GEMINI_TIMEOUT_SECONDS * 1000,
+                retry_options=genai_types.HttpRetryOptions(attempts=1),
+            ),
+        )
         print(f"--- Gemini client initialized (model: {GEMINI_MODEL}) ---")
     except Exception as e:
         print(f"--- Failed to initialize Gemini client: {e} ---")
@@ -61,10 +71,18 @@ def gemini_generate(contents, system_instruction=None, response_schema=None):
         response_mime_type="application/json" if response_schema else None,
         response_schema=response_schema,
     )
-    response = gemini_client.models.generate_content(model=GEMINI_MODEL, contents=contents, config=config)
-    if not response.text:
-        raise RuntimeError("Gemini returned an empty response.")
-    return response.text
+    models = [GEMINI_MODEL] + ([GEMINI_FALLBACK_MODEL] if GEMINI_FALLBACK_MODEL and GEMINI_FALLBACK_MODEL != GEMINI_MODEL else [])
+    errors = []
+    for model in models:
+        try:
+            response = gemini_client.models.generate_content(model=model, contents=contents, config=config)
+            if response.text:
+                return response.text
+            errors.append(f"{model}: empty response")
+        except Exception as e:  # overloaded, timed out, or no access to this model: try the next one
+            print(f"Gemini call failed on {model}: {e}")
+            errors.append(f"{model}: {str(e)[:200]}")
+    raise RuntimeError(" | ".join(errors))
 
 
 # --- Health Check / Root Route (ADDED FOR RENDER) ---
@@ -95,13 +113,26 @@ def get_indicator_value(df, indicator_name, default_val="N/A"):
     print(f"DEBUG: get_indicator_value for {indicator_name}: Column '{indicator_name}' NOT found in DataFrame columns: {df.columns.tolist()}, returning '{default_val}'")
     return default_val
 
-# Function to fetch live market data (for dashboard)
+MARKET_CACHE_SECONDS = 60
+_market_cache = {"data": None, "time": 0.0}
+_market_cache_lock = threading.Lock()
+
+
+def get_market_data_cached():
+    """Dashboard market data, recomputed at most once a minute."""
+    with _market_cache_lock:
+        if _market_cache["data"] is None or time.time() - _market_cache["time"] > MARKET_CACHE_SECONDS:
+            _market_cache["data"] = _compute_market_data()
+            _market_cache["time"] = time.time()
+        return _market_cache["data"]
+
+
 @app.route('/all_market_prices', methods=['GET'])
 def get_all_market_prices():
-    if not bybit_client:
-        print("Error: Bybit client not initialized in get_all_market_prices.")
-        return jsonify({"error": "Bybit client not initialized"}), 500
+    return jsonify(get_market_data_cached())
 
+
+def _compute_market_data():
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT"]
     market_data = {}
 
@@ -252,9 +283,9 @@ def get_all_market_prices():
                 "macd": "N/A", "stoch_k": "N/A", "volume": "N/A", "orscr_signal": "N/A"
             }
         
-        time.sleep(0.5)
+        time.sleep(0.2)
 
-    return jsonify(market_data)
+    return market_data
 
 # --- Chat Endpoint ---
 @app.route('/chat', methods=['POST'])
@@ -283,7 +314,7 @@ def chat():
         return jsonify({"error": "No message provided."}), 400
 
     # Live market data for context
-    market_data = get_all_market_prices().json
+    market_data = get_market_data_cached()
 
     system_instruction = f"""
     You are Aura, an AI trading assistant. Give insightful, helpful and friendly answers to the user's
