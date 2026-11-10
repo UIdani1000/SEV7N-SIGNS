@@ -41,7 +41,8 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
     const crossed = open.some(t => { const r = rawR(t); return r != null && (r <= -1 || r >= (t.rr || 3)); });
     if (crossed && Date.now() - lastCheck.current > 15000) { lastCheck.current = Date.now(); refresh(); }
   }, [live.at]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sign = (x: number) => (x >= 0 ? "+" : "−") + usd(Math.abs(x));
+  const cents = (x: number) => `$${Math.abs(x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const sign = (x: number) => (x >= 0 ? "+" : "−") + cents(x);
   const tone = (x: number) => ({ color: x > 0 ? "var(--violet)" : x < 0 ? "var(--rust)" : undefined });
   const byStrat = Object.entries(closed.reduce((acc: Record<string, PaperTrade[]>, t) => { (acc[t.strategy] ||= []).push(t); return acc; }, {}));
   return (
@@ -50,7 +51,7 @@ export default function Paper({ store, setStore, toast }: { store: Store; setSto
       <p className="muted mt-2 max-w-prose">Practice with fake money. Each trade is checked against real prices until it hits its target, its stop, or its time limit.</p>
       <div className="mt-6 num">
         <div className="text-sm muted">Paper balance{open.length > 0 ? ", including open trades" : ""}</div>
-        <div className="display text-[18vw] sm:text-8xl leading-none tick" style={tone(total)}>{usd(equity)}</div>
+        <div className="display text-[18vw] sm:text-8xl leading-none tick" style={tone(total)}>{cents(equity)}</div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-sm">
           <span className="font-semibold" style={tone(total)}>{sign(total)} ({total >= 0 ? "+" : ""}{(total / Math.max(store.startBalance, 1) * 100).toFixed(1)}%) since {usd(store.startBalance)}</span>
           {open.length > 0 && <LiveTag at={live.at} stale={live.stale} />}
