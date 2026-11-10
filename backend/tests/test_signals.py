@@ -158,3 +158,14 @@ def test_alert_session_and_batch_scalp(monkeypatch, client):
     assert len(sent) == 1 and "HIGH RISK" in sent[0]                   # sent once, not repeated
     assert client.delete("/api/alerts/session").get_json()["active"] is False
     assert client.post("/api/alerts/session", json={"symbols": ["BTCUSDT"], "end_at": "2020-01-01T00:00:00Z"}).status_code == 400
+
+def test_ended_session_cannot_be_revived(monkeypatch, client):
+    import alerts
+    monkeypatch.setattr(alerts, "_loop", lambda: None)
+    end = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(minutes=30)).isoformat()
+    assert client.post("/api/alerts/session", json={"symbols": ["BTCUSDT"], "end_at": end, "sid": "s1"}).get_json()["active"]
+    assert client.delete("/api/alerts/session?sid=s1").get_json()["active"] is False
+    late = client.post("/api/alerts/session", json={"symbols": ["BTCUSDT"], "end_at": end, "sid": "s1"})   # in-flight re-registration
+    assert late.status_code == 409 and client.get("/api/alerts/session").get_json()["active"] is False
+    assert client.post("/api/alerts/session", json={"symbols": ["ETHUSDT"], "end_at": end, "sid": "s2"}).get_json()["active"]   # a new session works
+    client.delete("/api/alerts/session?sid=s2")

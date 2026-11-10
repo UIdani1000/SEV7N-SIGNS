@@ -17,13 +17,12 @@ export function useHighRisk(store: Store, setStore: (s: Store) => void, toast: (
   const storeRef = useRef(store); storeRef.current = store;
   const seen = useRef<Set<string>>(new Set());
   const liveId = useRef<number | null>(null);            // startedAt of the running session; null once ended
-  const pendingPost = useRef<Promise<unknown> | null>(null);
   useEffect(() => { try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.endAt > Date.now()) save(s); } catch { /* none */ } }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const save = (s: HRSession | null) => { liveId.current = s ? s.startedAt : null; setSessionState(s); try { if (s) localStorage.setItem(KEY, JSON.stringify(s)); else localStorage.removeItem(KEY); } catch { /* blocked */ } };
 
   const tick = useCallback(async (s: HRSession) => {
     if (liveId.current !== s.startedAt) return;       // ended while this check was queued
-    pendingPost.current = setServerSession(s.symbols, new Date(s.endAt).toISOString()).then(setServer).catch(() => setServer(null));
+    setServerSession(s.symbols, new Date(s.endAt).toISOString(), String(s.startedAt)).then(setServer).catch(() => setServer(null));
     try {
       const r = await getScalpMany(s.symbols);
       const next: Record<string, ScalpView & { error?: string }> = {};
@@ -54,7 +53,7 @@ export function useHighRisk(store: Store, setStore: (s: Store) => void, toast: (
     if (!session) return;
     tick(session);
     const id = setInterval(() => tick(session), 60000);
-    const endT = setTimeout(() => { save(null); Promise.resolve(pendingPost.current).catch(() => {}).then(() => stopServerSession()).catch(() => {}); toast("High Risk session finished. Results keep updating in Paper."); }, Math.max(0, session.endAt - Date.now()));
+    const endT = setTimeout(() => { save(null); stopServerSession(String(session.startedAt)).catch(() => {}); toast("High Risk session finished. Results keep updating in Paper."); }, Math.max(0, session.endAt - Date.now()));
     const onVis = () => { if (document.visibilityState === "visible") tick(session); };
     document.addEventListener("visibilitychange", onVis);
     return () => { clearInterval(id); clearTimeout(endT); document.removeEventListener("visibilitychange", onVis); };
@@ -63,11 +62,7 @@ export function useHighRisk(store: Store, setStore: (s: Store) => void, toast: (
   return {
     session, views, log, server,
     start: (symbols: string[], minutes: number, auto: boolean) => { setLog([]); setViews({}); save({ symbols, endAt: Date.now() + minutes * 60000, auto, startedAt: Date.now() }); },
-    stop: () => {
-      save(null); toast("High Risk session ended.");
-      // wait for any in-flight registration so the stop always lands last
-      Promise.resolve(pendingPost.current).catch(() => {}).then(() => stopServerSession()).catch(() => {});
-    },
+    stop: () => { const sid = session ? String(session.startedAt) : ""; save(null); toast("High Risk session ended."); stopServerSession(sid).catch(() => {}); },
     setSymbols: (symbols: string[]) => session && symbols.length && save({ ...session, symbols }),
     extend: (minutes: number) => session && save({ ...session, endAt: Math.min(session.endAt + minutes * 60000, Date.now() + 240 * 60000) }),
     setAuto: (auto: boolean) => session && save({ ...session, auto }),

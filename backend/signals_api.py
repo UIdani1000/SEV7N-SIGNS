@@ -79,15 +79,15 @@ def alerts_start():
     import alerts
     b = request.get_json(silent=True) or {}
     try:
-        return jsonify(alerts.set_session(b.get("symbols") or [], b.get("end_at") or ""))
+        return jsonify(alerts.set_session(b.get("symbols") or [], b.get("end_at") or "", str(b.get("sid") or "") or None))
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 409 if "already ended" in str(e) else 400
 
 
 @api.delete("/alerts/session")
 def alerts_stop():
     import alerts
-    return jsonify(alerts.clear_session())
+    return jsonify(alerts.clear_session(request.args.get("sid") or None))
 
 
 @api.post("/telegram/siren")

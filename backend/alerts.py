@@ -7,12 +7,12 @@ import os, threading, time
 from datetime import datetime, timezone
 import requests
 
-STATE = {"session": None, "sent": set(), "thread": None, "last_check": None, "last_error": None}
+STATE = {"session": None, "sent": set(), "thread": None, "last_check": None, "last_error": None, "stopped": set()}
 LOCK = threading.Lock()
 MAX_MINUTES = 240
 
 
-def set_session(symbols, end_at):
+def set_session(symbols, end_at, sid=None):
     import scalp as SC
     syms = [s for s in symbols if s in SC.SCALP_MARKETS][:5]
     end = datetime.fromisoformat(end_at.replace("Z", "+00:00"))
@@ -22,15 +22,21 @@ def set_session(symbols, end_at):
     if (end - now).total_seconds() > MAX_MINUTES * 60:
         raise ValueError(f"Sessions are limited to {MAX_MINUTES} minutes")
     with LOCK:
-        STATE["session"] = {"symbols": syms, "end_at": end.isoformat()}
+        if sid and sid in STATE["stopped"]:
+            raise ValueError("This session was already ended")      # a late registration must not revive it
+        STATE["session"] = {"symbols": syms, "end_at": end.isoformat(), "sid": sid}
         if not STATE["thread"] or not STATE["thread"].is_alive():
             STATE["thread"] = threading.Thread(target=_loop, daemon=True, name="hr-watcher"); STATE["thread"].start()
     return status()
 
 
-def clear_session():
+def clear_session(sid=None):
     with LOCK:
-        STATE["session"] = None
+        if sid:
+            STATE["stopped"].add(sid)
+            if len(STATE["stopped"]) > 200: STATE["stopped"] = set(list(STATE["stopped"])[-100:])
+        if not sid or not STATE["session"] or STATE["session"].get("sid") in (sid, None):
+            STATE["session"] = None
     return status()
 
 

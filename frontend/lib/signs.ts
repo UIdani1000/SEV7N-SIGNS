@@ -139,6 +139,7 @@ export const MARKET_LIST: [string, string, string][] = [["BTCUSDT", "BTC", "Bitc
   ["XLMUSDT", "XLM", "Stellar"], ["ETCUSDT", "ETC", "Ethereum Classic"], ["FILUSDT", "FIL", "Filecoin"], ["AAVEUSDT", "AAVE", "Aave"]];
 
 export const getScalpMany = (symbols: string[]) => call<{ markets: (ScalpView & { error?: string })[] }>(`/api/scalp?symbols=${symbols.join(",")}`, undefined, 45000);
-export const setServerSession = (symbols: string[], end_at: string) => call<{ active: boolean; telegram: boolean }>("/api/alerts/session", { method: "POST", body: JSON.stringify({ symbols, end_at }) });
-export const stopServerSession = () => call<{ active: boolean }>("/api/alerts/session", { method: "DELETE" });
+export const setServerSession = (symbols: string[], end_at: string, sid: string) => call<{ active: boolean; telegram: boolean }>("/api/alerts/session", { method: "POST", body: JSON.stringify({ symbols, end_at, sid }) });
+// keepalive: the stop is delivered even if the app is closed right after tapping End
+export const stopServerSession = (sid: string) => call<{ active: boolean }>(`/api/alerts/session?sid=${sid}`, { method: "DELETE", keepalive: true });
 export const sendSirenToTelegram = () => call<{ ok: boolean; error?: string }>("/api/telegram/siren", { method: "POST" }, 30000);
