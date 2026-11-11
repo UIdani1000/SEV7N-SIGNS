@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Signal, plan, explain, usd, fmtPrice, whenLocal, entryClosed } from "@/lib/signs";
 import { Ladder, LiveTag, MiniChart } from "./parts";
 import { usePrices } from "@/lib/usePrices";
+import { GUIDES, GuideKey } from "@/lib/guides";
+import { IndicatorChart, StrategyGuide } from "./Guide";
 
 const TF: Record<string, string> = { weekly: "1d", squeeze: "4h", pullback: "1h" };
 
@@ -35,6 +37,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
   };
   const expires = new Date(sig.expires);
   const late = entryClosed(sig);
+  const guide = sig.strategy in GUIDES ? GUIDES[sig.strategy as GuideKey] : null;
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -55,12 +58,14 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
             <div><dt className="muted text-xs">Enter by</dt><dd className="font-semibold num">{whenLocal(sig.enter_by)}</dd></div>
           </dl>
         )}
-        {sig.how_to_enter && !late && <p className="text-sm mt-2">{sig.how_to_enter}</p>}
+        {sig.how_to_enter && !late && !guide && <p className="text-sm mt-2">{sig.how_to_enter}</p>}
         {late && <div className="mt-4 rounded-2xl p-4 text-sm" style={{ background: "var(--rust)", color: "#fff" }} role="alert">
           <b>The entry window closed {whenLocal(sig.enter_by)}.</b> The tested numbers only apply to prompt entries, so skip this one or paper-trade it only.</div>}
         <p className="text-xs muted mt-2">Exit by {expires.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })} if neither the stop nor the target hits.</p>
 
-        <div className="mt-5"><MiniChart sig={sig} tf={TF[sig.strategy]} /></div>
+        <div className="mt-5">{guide ? <IndicatorChart symbol={sig.symbol} g={guide} levels={sig} /> : <MiniChart sig={sig} tf={TF[sig.strategy] || "1h"} />}</div>
+        {guide && <div className="mt-6 rounded-2xl p-4" style={{ background: "var(--paper-2)" }}>
+          <p className="text-xs muted mb-1">How {guide.name} works</p><StrategyGuide g={guide} compact /></div>}
 
         <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_1.1fr] gap-6 mt-6 items-start">
           <div><Ladder sig={sig} price={price} height={200} /><div className="mt-9"><LiveTag at={live.at} stale={live.stale} /></div></div>

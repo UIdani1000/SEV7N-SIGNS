@@ -1,10 +1,11 @@
 "use client";
-export type ToolView = "shorts" | "prop" | "lab" | "highrisk" | "sync";
+export type ToolView = "guide" | "shorts" | "prop" | "lab" | "highrisk" | "sync";
 const TOOLS: [ToolView | "settings", string, string][] = [
+  ["guide", "How the strategies work", "What each one looks for, when to enter, what to expect"],
   ["shorts", "Shorts", "Sell setups from the Trend Pullback rules"],
   ["prop", "Prop Mode", "Track a challenge: limits, risk per trade, payouts"],
   ["lab", "Strategy Lab", "Test any rule book on real market history"],
-  ["highrisk", "High Risk Mode", "5-minute scalp sessions, paper only"],
+  ["highrisk", "High Risk Mode", "Practice scalps on the 5-minute chart. Loses money over time; paper only"],
   ["sync", "Account", "Sign in to keep your data on every device"],
   ["settings", "Settings", "Balance, risk and Telegram alerts"],
 ];

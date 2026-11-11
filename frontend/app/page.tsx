@@ -13,6 +13,8 @@ import Lab from "@/components/signs/Lab";
 import HighRisk from "@/components/signs/HighRisk";
 import Account from "@/components/signs/Account";
 import Tools, { ToolView } from "@/components/signs/Tools";
+import Strategies from "@/components/signs/Guide";
+import { GUIDES, CORE } from "@/lib/guides";
 import type { User } from "firebase/auth";
 import { listen, merge, pull, push, watchUser } from "@/lib/sync";
 import { useHighRisk, useSignalWatch } from "@/lib/highrisk";
@@ -144,12 +146,11 @@ export default function Home() {
           <ScanBlock scan={longScan} title="Scan markets" sub="Runs every strategy on 20 markets and shows what is ready, and what is close." onOpen={setOpen} />
           <div className="mt-10">
             <p className="text-sm font-semibold">What the scan runs</p>
-            {[["Weekly Trend", "Strongest weekly uptrend among BTC, ETH, SOL, XRP and gold. Picked every Monday.", "48% wins, +0.20R, about 1 a week"],
-              ["Squeeze Breakout", "A quiet 4h squeeze that breaks out in the direction of the daily trend.", "32% wins, +0.15R, about 1–2 a week"],
-              ["Trend Pullback", "Your EMA and MACD rules, one timeframe up: daily trend, 4h momentum, 1h entry.", "35% wins, +0.08R, about 3–5 a week"]].map(([n, d, st]) => (
-              <div key={n} className="row"><div className="flex justify-between gap-4"><span className="font-semibold">{n}</span><span className="text-xs muted num text-right">{st}</span></div>
-                <p className="text-sm muted mt-1">{d}</p></div>))}
-            <p className="text-xs muted mt-3">Records from 2020–2026 backtests at 1:3 with fees. R is the amount risked per trade.</p>
+            {CORE.map(k => { const g = GUIDES[k]; return (
+              <button key={k} className="row w-full text-left" onClick={() => setView("guide")}>
+                <div className="flex justify-between gap-4"><span className="font-semibold">{g.name}</span><span className="text-xs muted text-right">{g.chart} chart, {g.perWeek} a week</span></div>
+                <p className="text-sm mt-1">{g.idea}</p><p className="text-xs muted mt-1">{g.expect}</p></button>); })}
+            <button className="btn btn-ghost mt-4" onClick={() => setView("guide")}>How the strategies work</button>
           </div>
         </section>
       </div>}
@@ -164,6 +165,7 @@ export default function Home() {
       {view === "paper" && <Paper store={store} setStore={setStore} toast={toast} signedIn={!!user} onSignIn={() => setView("sync")} />}
       {view === "prop" && <Prop store={store} setStore={setStore} toast={toast} />}
       {view === "lab" && <Lab store={store} />}
+      {view === "guide" && <Strategies onHighRisk={() => setView("highrisk")} />}
       {view === "highrisk" && <HighRisk store={store} hr={hr} openSettings={() => setSettings(true)} />}
       {view !== "highrisk" && <SessionBar hr={hr} onOpen={() => setView("highrisk")} />}
       {view === "sync" && <Account user={user} syncedAt={syncedAt} toast={toast} trades={store.paper.length} />}
@@ -173,7 +175,7 @@ export default function Home() {
         {(["deck", "markets", "paper", "ask"] as View[]).map(v => (
           <button key={v} aria-current={view === v ? "page" : undefined} onClick={() => setView(v)}>{({ deck: "Deck", markets: "Markets", paper: "Paper", ask: "Ask AI" } as Record<string, string>)[v]}</button>
         ))}
-        <button aria-current={["shorts", "prop", "lab", "highrisk", "sync"].includes(view) ? "page" : undefined} onClick={() => setTools(true)}>Tools</button>
+        <button aria-current={["guide", "shorts", "prop", "lab", "highrisk", "sync"].includes(view) ? "page" : undefined} onClick={() => setTools(true)}>Tools</button>
       </nav>
 
       {open && <SignalSheet sig={open} balance={store.balance} riskPct={store.riskPct} onClose={() => setOpen(null)} onPaper={paperTrade}

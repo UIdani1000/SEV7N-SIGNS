@@ -36,7 +36,7 @@ async function call<T>(path: string, init?: RequestInit, timeoutMs = 90000): Pro
 
 export const getWeekly = () => call<Weekly>("/api/weekly");
 export const runScan = (side: "all" | "long" | "short") => call<ScanResult>(`/api/scan?side=${side}`);
-export const getCandles = (symbol: string, tf: string) => call<{ candles: { t: number; o: number; h: number; l: number; c: number }[] }>(`/api/candles?symbol=${symbol}&tf=${tf}&limit=80`);
+export const getCandles = (symbol: string, tf: string, limit = 80) => call<{ candles: { t: number; o: number; h: number; l: number; c: number }[] }>(`/api/candles?symbol=${symbol}&tf=${tf}&limit=${limit}`);
 export const explain = (signal: Signal) => call<{ text: string | null; error?: string }>("/api/explain", { method: "POST", body: JSON.stringify({ signal }) });
 export const tradeStatus = (trades: PaperTrade[]) => call<{ trades: { id: string; status: string; r?: number; exit?: number; price?: number; closed_at?: string }[] }>("/api/trades/status", { method: "POST", body: JSON.stringify({ trades }) });
 export const telegramStatus = () => call<{ connected: boolean; bot?: string; chat_id_set?: string; recent_chats?: { id: number; name: string }[]; error?: string }>("/api/telegram/status");

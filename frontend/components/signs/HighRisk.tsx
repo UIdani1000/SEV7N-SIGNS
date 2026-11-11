@@ -5,6 +5,8 @@ import { HighRiskCtl, tickerOf } from "@/lib/highrisk";
 import { usePrices } from "@/lib/usePrices";
 import { unlockSound } from "@/lib/alerts";
 import { Ladder, LiveTag } from "./parts";
+import { GUIDES } from "@/lib/guides";
+import { IndicatorChart, StrategyGuide } from "./Guide";
 
 const MK = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "GOLD"];
 export const clock = (ms: number) => `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
@@ -29,9 +31,12 @@ export default function HighRisk({ store, hr, openSettings }: { store: Store; hr
   return (
     <section className="max-w-3xl mx-auto px-5 pt-6 pb-40">
       <h1 className="display text-6xl sm:text-7xl" style={{ color: "var(--rust)" }}>High Risk Mode</h1>
-      <div className="rounded-2xl p-4 mt-4 text-sm" style={{ background: "var(--rust)", color: "#fff" }} role="note">
-        <b>Paper only.</b> Tested on {SCALP_STATS.years} years of BTC, ETH and gold: {SCALP_STATS.win_rate}% wins, {SCALP_STATS.avg_r}R per scalp after spreads. About −${Math.abs(SCALP_STATS.avg_r * 10).toFixed(2)} per 10 scalps risking $1.
+      <p className="text-lg mt-1">Practice scalps on the 5-minute chart.</p>
+      <div className="rounded-2xl p-4 mt-4 text-sm grid gap-1" style={{ background: "var(--rust)", color: "#fff" }} role="note">
+        <b>Practice only. This loses money over time.</b>
+        <span>In {SCALP_STATS.years} years of testing, about {Math.round(SCALP_STATS.win_rate / 10)} in 10 scalps won, and once spreads were paid the average scalp lost about a fifth of what it risked. Use it to practise spotting fast setups, never with real money.</span>
       </div>
+      {!s && <div className="mt-6"><StrategyGuide g={GUIDES.scalp} compact noExpect /></div>}
 
       <div className="mt-6 text-sm font-semibold">{s ? "Watching (tap to add or remove)" : "Markets to watch"}</div>
       <div className="flex flex-wrap gap-2 mt-2">{MK.map(m => {
@@ -59,14 +64,17 @@ export default function HighRisk({ store, hr, openSettings }: { store: Store; hr
         </div>
 
         {syms.length > 1 && <div className="flex gap-2 mt-5 overflow-x-auto" role="tablist">{syms.map(m => <button key={m} role="tab" aria-selected={m === active} className={`pill !py-1.5 shrink-0 ${m === active ? "pill-short" : ""}`} onClick={() => setTab(m)}>{tickerOf(m)}{setupOf(m) ? " 🚨" : ""}</button>)}</div>}
-        <p className="text-sm mt-3 num"><b>{tickerOf(active)}</b> {live.prices[active] ? fmtPrice(live.prices[active].price) : v ? fmtPrice(v.price) : "…"} on 5-minute candles</p>
+        <p className="text-sm mt-3 num"><b>{tickerOf(active)}</b> {live.prices[active] ? fmtPrice(live.prices[active].price) : v ? fmtPrice(v.price) : "…"} on 5-minute candles. Checked again after every candle closes.</p>
+        <div className="mt-3"><IndicatorChart symbol={active} g={GUIDES.scalp} levels={cur || null} refresh={v?.candle_time} /></div>
         {v?.error && <p className="text-sm mt-1" style={{ color: "var(--rust)" }}>{v.error}</p>}
         {cur && <div className="row mt-3 grid grid-cols-1 min-[400px]:grid-cols-[1fr_1fr] gap-5">
           <div><span className={`pill ${cur.side === "long" ? "pill-long" : "pill-short"}`}>{cur.side === "long" ? "Buy" : "Sell"} now</span>
-            <p className="mt-2 text-sm">Close by <b>{new Date(cur.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> if neither level hits.</p></div>
+            <p className="mt-2 text-sm"><b>Enter within 5 minutes</b> of {new Date(new Date(cur.candle_time).getTime() + 300000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}, or skip it.</p>
+            <p className="mt-1 text-sm">Close by <b>{new Date(cur.expires).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</b> at whatever price it’s at if neither the stop nor the target hits.</p></div>
           <Ladder sig={cur as unknown as Signal} price={live.prices[active]?.price ?? v?.price} height={130} /></div>}
         {v?.sides?.map(x => <div key={x.side} className="row">
           <div className="flex justify-between"><span className="font-semibold">{x.side === "long" ? "Buy" : "Sell"} checklist</span><span className="num text-sm">{x.met} of {x.total}</span></div>
+          <p className="text-xs muted mt-0.5">An entry fires only when all {x.total} are ticked.</p>
           <div className="grid gap-1.5 mt-2">{x.checks.map(c => <div key={c.label} className="chk"><i className={c.ok ? "on" : "off"}>{c.ok ? "✓" : ""}</i><span className={c.ok ? "" : "muted"}>{c.label}</span></div>)}</div>
         </div>)}
         {!v && <p className="muted text-sm mt-3">Reading {tickerOf(active)}…</p>}
