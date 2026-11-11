@@ -25,8 +25,10 @@ app = Flask(__name__)
 # Only the dashboard may call this API from a browser. Override with ALLOWED_ORIGINS
 # (comma-separated) if you add a custom domain.
 _default_origins = [
-    "https://aura-trading-dashboard-frontend.vercel.app",
-    r"https://aura-trading-dashboard-frontend-.*\.vercel\.app",  # Vercel preview/project URLs
+    "https://sevensigns.vercel.app",                                 # production (SEV7N SIGNS)
+    r"https://sevensigns-.*\.vercel\.app",                           # Vercel preview URLs after the rename
+    "https://aura-trading-dashboard-frontend.vercel.app",            # old name, kept while it still resolves
+    r"https://aura-trading-dashboard-frontend-.*\.vercel\.app",      # Vercel still issues deployment URLs under the old project name
     "http://localhost:3000",
 ]
 _env_origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]

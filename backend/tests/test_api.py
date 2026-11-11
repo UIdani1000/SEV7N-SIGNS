@@ -107,6 +107,12 @@ def test_cors_allows_dashboard_only(client):
     assert ok.headers.get("Access-Control-Allow-Origin") == "https://aura-trading-dashboard-frontend.vercel.app"
     preview = client.get("/", headers={"Origin": "https://aura-trading-dashboard-frontend-abc123-bignssien-gmailcoms-projects.vercel.app"})
     assert preview.headers.get("Access-Control-Allow-Origin")
+    new = client.get("/", headers={"Origin": "https://sevensigns.vercel.app"})
+    assert new.headers.get("Access-Control-Allow-Origin") == "https://sevensigns.vercel.app"
+    new_preview = client.get("/", headers={"Origin": "https://sevensigns-git-main-abc123.vercel.app"})
+    assert new_preview.headers.get("Access-Control-Allow-Origin")
+    lookalike = client.get("/", headers={"Origin": "https://sevensigns.vercel.app.evil.com"})
+    assert lookalike.headers.get("Access-Control-Allow-Origin") is None
     bad = client.get("/", headers={"Origin": "https://evil.example.com"})
     assert bad.headers.get("Access-Control-Allow-Origin") is None
 
