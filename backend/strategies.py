@@ -46,6 +46,19 @@ STATS = {
                  "max_risk_hint": 2},
 }
 
+# How each strategy is executed. Shown on every signal and alert so nobody has to guess.
+#   chart       - the candles the rules run on
+#   enter_within- how long after the signal candle CLOSES the entry is still valid (the tested edge assumes a prompt entry)
+EXECUTION = {
+    "weekly":   {"chart": "Daily (weekly rotation)", "candle": "1d", "enter_within_min": 24 * 60,
+                 "how": "Buy at Monday's open. If you see this after Monday, skip it: the test only covers Monday entries."},
+    "squeeze":  {"chart": "4h", "candle": "4h", "enter_within_min": 60,
+                 "how": "Enter right after the 4h candle closes. More than an hour late, skip it."},
+    "pullback": {"chart": "1h", "candle": "1h", "enter_within_min": 20,
+                 "how": "Enter right after the 1h candle closes. More than 20 minutes late, skip it."},
+}
+ALERT_WINDOW_MIN = 120   # alerts older than this (or past their entry deadline) are never sent, e.g. after a server restart
+
 TF_SECONDS = {"5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
 _BYBIT_TF = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
 _BINANCE_TF = {"5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d"}
@@ -206,8 +219,23 @@ def _signal(strategy, symbol, side, entry, sl, candle_time, expires, reasons, rr
            "risk_pct_of_price": round(risk / entry * 100, 2),
            "candle_time": pd.Timestamp(candle_time).isoformat(), "expires": pd.Timestamp(expires).isoformat(),
            "reasons": reasons, "stats": STATS[strategy]}
+    ex = EXECUTION.get(strategy)
+    if ex:
+        # weekly uses the Monday open as its candle; the others use the open time of the signal candle
+        closed = pd.Timestamp(candle_time) if strategy == "weekly" else pd.Timestamp(candle_time) + pd.Timedelta(seconds=TF_SECONDS[ex["candle"]])
+        out.update({"chart": ex["chart"], "signal_at": closed.isoformat(),
+                    "enter_by": (closed + pd.Timedelta(minutes=ex["enter_within_min"])).isoformat(), "how_to_enter": ex["how"]})
     if extra: out.update(extra)
     return out
+
+
+def alert_is_fresh(sig, now=None):
+    """True while a signal is new enough to alert: within ALERT_WINDOW_MIN of firing and before its entry deadline."""
+    now = pd.Timestamp(now or _now())
+    if not sig.get("signal_at"):
+        return True
+    at, by = pd.Timestamp(sig["signal_at"]), pd.Timestamp(sig["enter_by"])
+    return at <= now <= min(by, at + pd.Timedelta(minutes=ALERT_WINDOW_MIN))
 
 
 # ---------------------------------------------------------------- Weekly Trend

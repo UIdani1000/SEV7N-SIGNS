@@ -7,7 +7,12 @@ export interface Signal {
   id: string; strategy: "weekly" | "squeeze" | "pullback" | "manual" | "scalp"; strategy_name: string; symbol: string; ticker: string; name: string;
   side: Side; entry: number; sl: number; tp: number; rr: number; risk_pct_of_price: number; candle_time: string; expires: string;
   reasons: string[]; stats: Stats; status?: string; price?: number | null; closed_at?: string | null;
+  chart?: string; signal_at?: string; enter_by?: string; how_to_enter?: string;   // execution info from the server
 }
+/** "Mon 14:00" in the viewer's local time. */
+export function whenLocal(iso?: string) { return iso ? new Date(iso).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" }) : ""; }
+/** True once a signal's entry window has passed: the tested edge no longer applies to a fresh entry. */
+export function entryClosed(sig: Pick<Signal, "enter_by">, now = Date.now()) { return !!sig.enter_by && now > new Date(sig.enter_by).getTime(); }
 export interface Check { label: string; ok: boolean }
 export interface Near { strategy: string; strategy_name: string; symbol: string; ticker: string; name: string; side: Side; checks: Check[]; met: number; total: number; watch: string }
 export interface Board { symbol: string; ticker: string; name: string; week_return_pct?: number; strength?: number; error?: string }

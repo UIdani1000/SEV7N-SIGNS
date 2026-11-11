@@ -209,11 +209,23 @@ def _tg(method, **params):
     return data["result"]
 
 
-def _fmt(sig):
+def _utc(iso):
+    return iso[:16].replace("T", " ") + " UTC" if iso else "?"
+
+
+def _fmt(sig, price=None):
     arrow = "BUY" if sig["side"] == "long" else "SELL"
-    return (f"🚨 SEV7N SIGNS | {sig['strategy_name']}\n{arrow} {sig['ticker']} ({sig['name']})\n"
-            f"Entry {sig['entry']}\nStop {sig['sl']}\nTarget {sig['tp']} (1:{sig['rr']:g})\n"
-            f"Valid until {sig['expires'][:16].replace('T', ' ')} UTC\nPaper-trade first. Not financial advice.")
+    lines = [f"🚨 SEV7N SIGNS | {sig['strategy_name']}", f"{arrow} {sig['ticker']} ({sig['name']})"]
+    if sig.get("chart"):
+        lines += [f"Chart: {sig['chart']}", f"Signal: {_utc(sig['signal_at'])}", f"Enter by: {_utc(sig['enter_by'])}"]
+    lines += [f"Entry {sig['entry']}", f"Stop {sig['sl']}", f"Target {sig['tp']} (1:{sig['rr']:g})"]
+    if price:
+        lines.append(f"Price now {S._round(price, price)}")
+    lines.append(f"Exit by {_utc(sig['expires'])} if neither stop nor target hits")
+    if sig.get("how_to_enter"):
+        lines.append(sig["how_to_enter"])
+    lines.append("Paper-trade first. Not financial advice.")
+    return "\n".join(lines)
 
 
 @api.get("/telegram/status")
@@ -257,14 +269,17 @@ def cron_scan_route():
     sigs = list(res["signals"])
     if res.get("weekly") and res["weekly"].get("pick") and res["weekly"]["pick"].get("status") == "active":
         sigs.append(res["weekly"]["pick"])
-    sent, chat = [], os.environ.get("TELEGRAM_CHAT_ID")
+    sent, stale, chat = [], [], os.environ.get("TELEGRAM_CHAT_ID")
+    prices = S.live_prices(list({s["symbol"] for s in sigs})) if sigs else {}
     for s in sigs:
         if s["id"] in _alerted:
             continue
         _alerted.add(s["id"])
+        if not S.alert_is_fresh(s):      # past its entry window (e.g. re-seen after a restart): never alert late
+            stale.append(s["id"]); continue
         if chat:
             try:
-                _tg("sendMessage", chat_id=chat, text=_fmt(s)); sent.append(s["id"])
+                _tg("sendMessage", chat_id=chat, text=_fmt(s, (prices.get(s["symbol"]) or {}).get("price"))); sent.append(s["id"])
             except Exception:
                 pass
-    return jsonify({"signals": len(sigs), "alerts_sent": len(sent), "telegram": bool(chat), "errors": res["errors"][:5]})
+    return jsonify({"signals": len(sigs), "alerts_sent": len(sent), "skipped_stale": len(stale), "telegram": bool(chat), "errors": res["errors"][:5]})

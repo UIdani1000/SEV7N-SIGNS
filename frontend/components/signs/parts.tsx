@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Signal, Near, fmtPrice, getCandles } from "@/lib/signs";
+import { Signal, Near, fmtPrice, getCandles, entryClosed } from "@/lib/signs";
 
 /** Arrow that flashes up or down when a live value changes. */
 export function Tick({ value }: { value: number | null | undefined }) {
@@ -99,7 +99,8 @@ export function SignalRow({ sig, onOpen }: { sig: Signal; onOpen: (s: Signal) =>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className={`pill ${sig.side === "long" ? "pill-long" : "pill-short"}`}>{sig.side === "long" ? "Buy" : "Sell"}</span>
-          <span className="text-xs muted">{sig.strategy_name}</span>
+          <span className="text-xs muted">{sig.strategy_name}{sig.chart ? ` · ${sig.chart} chart` : ""}</span>
+          {entryClosed(sig) && <span className="text-xs font-semibold" style={{ color: "var(--rust)" }}>Entry window closed</span>}
         </div>
         <div className="display text-4xl">{sig.ticker}</div>
         <div className="text-sm muted num mt-1">Entry {fmtPrice(sig.entry)}, stop {fmtPrice(sig.sl)}, target {fmtPrice(sig.tp)}</div>

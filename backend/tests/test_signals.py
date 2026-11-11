@@ -169,3 +169,35 @@ def test_ended_session_cannot_be_revived(monkeypatch, client):
     assert late.status_code == 409 and client.get("/api/alerts/session").get_json()["active"] is False
     assert client.post("/api/alerts/session", json={"symbols": ["ETHUSDT"], "end_at": end, "sid": "s2"}).get_json()["active"]   # a new session works
     client.delete("/api/alerts/session?sid=s2")
+
+
+def test_signals_say_chart_and_entry_deadline():
+    import strategies as S, pandas as pd
+    t = pd.Timestamp("2026-11-10 08:00", tz="UTC")             # 1h candle opening 08:00 closes 09:00
+    sig = S._signal("pullback", "BTCUSDT", "long", 100.0, 99.0, t, t + pd.Timedelta(days=7), ["x"])
+    assert sig["chart"] == "1h"
+    assert sig["signal_at"].startswith("2026-11-10T09:00")
+    assert sig["enter_by"].startswith("2026-11-10T09:20")
+    assert "skip" in sig["how_to_enter"]
+    wk = S._signal("weekly", "GOLD", "long", 100.0, 95.0, pd.Timestamp("2026-11-09", tz="UTC"), pd.Timestamp("2026-11-16", tz="UTC"), ["x"])
+    assert wk["signal_at"].startswith("2026-11-09T00:00") and wk["enter_by"].startswith("2026-11-10T00:00")
+
+
+def test_stale_signals_are_never_alerted():
+    import strategies as S, pandas as pd
+    wk = S._signal("weekly", "GOLD", "long", 4047.81, 3933.35, pd.Timestamp("2026-11-09", tz="UTC"), pd.Timestamp("2026-11-16", tz="UTC"), ["x"])
+    assert S.alert_is_fresh(wk, pd.Timestamp("2026-11-09 00:05", tz="UTC"))
+    assert not S.alert_is_fresh(wk, pd.Timestamp("2026-11-09 03:00", tz="UTC"))   # past the 2h alert window
+    assert not S.alert_is_fresh(wk, pd.Timestamp("2026-11-11 09:00", tz="UTC"))   # the Wednesday re-send that happened
+    t = pd.Timestamp("2026-11-10 08:00", tz="UTC")
+    pb = S._signal("pullback", "BTCUSDT", "long", 100.0, 99.0, t, t + pd.Timedelta(days=7), ["x"])
+    assert S.alert_is_fresh(pb, pd.Timestamp("2026-11-10 09:05", tz="UTC"))
+    assert not S.alert_is_fresh(pb, pd.Timestamp("2026-11-10 09:25", tz="UTC"))
+
+
+def test_telegram_message_is_explicit():
+    import strategies as S, signals_api as A, pandas as pd
+    wk = S._signal("weekly", "GOLD", "long", 4047.81, 3933.35, pd.Timestamp("2026-11-09", tz="UTC"), pd.Timestamp("2026-11-16", tz="UTC"), ["x"])
+    msg = A._fmt(wk, 3979.26)
+    for part in ("Chart: Daily", "Signal: 2026-11-09 00:00 UTC", "Enter by: 2026-11-10 00:00 UTC", "Price now 3979.26", "Exit by 2026-11-16 00:00 UTC", "Monday"):
+        assert part in msg, part

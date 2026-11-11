@@ -50,7 +50,7 @@ def status():
 def _text(sym, setup):
     import strategies as S
     side = "BUY" if setup["side"] == "long" else "SELL"
-    return (f"🚨 HIGH RISK (paper only)\n{side} {S.TICKERS[sym]} now\nEntry {S._round(setup['entry'], setup['entry'])}\n"
+    return (f"🚨 HIGH RISK (paper only)\n{side} {S.TICKERS[sym]} now\nChart: 5m. Enter within 5 minutes or skip.\nEntry {S._round(setup['entry'], setup['entry'])}\n"
             f"Stop {S._round(setup['sl'], setup['entry'])}\nTarget {S._round(setup['tp'], setup['entry'])} (1:{setup['rr']:g})\n"
             f"Close by {setup['expires'][11:16]} UTC if neither hits.\nTested: 38% wins, -0.21R per scalp after spreads.")
 

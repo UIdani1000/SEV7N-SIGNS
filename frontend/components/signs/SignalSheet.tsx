@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Signal, plan, explain, usd, fmtPrice } from "@/lib/signs";
+import { Signal, plan, explain, usd, fmtPrice, whenLocal, entryClosed } from "@/lib/signs";
 import { Ladder, LiveTag, MiniChart } from "./parts";
 import { usePrices } from "@/lib/usePrices";
 
@@ -34,6 +34,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
     try { await navigator.clipboard.writeText(txt); } catch { /* clipboard blocked */ }
   };
   const expires = new Date(sig.expires);
+  const late = entryClosed(sig);
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -42,10 +43,22 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
           <div>
             <span className={`pill ${sig.side === "long" ? "pill-long" : "pill-short"}`}>{sig.side === "long" ? "Buy" : "Sell"} setup</span>
             <h2 className="display text-6xl mt-3">{sig.ticker}</h2>
-            <p className="muted text-sm mt-1">{sig.name}, {sig.strategy_name}. Valid until {expires.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}.</p>
+            <p className="muted text-sm mt-1">{sig.name}, {sig.strategy_name}.</p>
           </div>
           <button className="btn btn-ghost !px-3 !py-2" onClick={onClose} aria-label="Close">Close</button>
         </div>
+
+        {sig.chart && (
+          <dl className="grid grid-cols-3 gap-3 mt-4 text-sm">
+            <div><dt className="muted text-xs">Chart</dt><dd className="font-semibold">{sig.chart}</dd></div>
+            <div><dt className="muted text-xs">Signal</dt><dd className="font-semibold num">{whenLocal(sig.signal_at)}</dd></div>
+            <div><dt className="muted text-xs">Enter by</dt><dd className="font-semibold num">{whenLocal(sig.enter_by)}</dd></div>
+          </dl>
+        )}
+        {sig.how_to_enter && !late && <p className="text-sm mt-2">{sig.how_to_enter}</p>}
+        {late && <div className="mt-4 rounded-2xl p-4 text-sm" style={{ background: "var(--rust)", color: "#fff" }} role="alert">
+          <b>The entry window closed {whenLocal(sig.enter_by)}.</b> The tested numbers only apply to prompt entries, so skip this one or paper-trade it only.</div>}
+        <p className="text-xs muted mt-2">Exit by {expires.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })} if neither the stop nor the target hits.</p>
 
         <div className="mt-5"><MiniChart sig={sig} tf={TF[sig.strategy]} /></div>
 
