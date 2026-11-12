@@ -68,7 +68,7 @@ export default function SignalSheet({ sig, balance, riskPct, onClose, onPaper, o
           <p className="text-xs muted mb-1">How {guide.name} works</p><StrategyGuide g={guide} compact /></div>}
 
         <div className="grid grid-cols-1 min-[400px]:grid-cols-[1fr_1.1fr] gap-6 mt-6 items-start">
-          <div><Ladder sig={sig} price={price} height={200} /><div className="mt-9"><LiveTag at={live.at} stale={live.stale} /></div></div>
+          <div><Ladder sig={sig} price={price} height={200} /><div className="mt-2"><LiveTag at={live.at} stale={live.stale} /></div></div>
           <div className="grid gap-3">
             <label className="text-sm font-semibold">Risk per trade
               <div className="flex items-center gap-2 mt-1">

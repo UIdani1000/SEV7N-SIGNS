@@ -104,7 +104,7 @@ export default function Paper({ store, setStore, toast, signedIn = false, onSign
             {live.prices[t.symbol] && <div className="text-sm num mt-1">Price {fmtPrice(live.prices[t.symbol].price)} <Tick value={live.prices[t.symbol].price} /></div>}
           </div>
           <Ladder sig={t} price={live.prices[t.symbol]?.price ?? t.result?.price ?? null} height={130} />
-          <div className="min-[400px]:col-span-2 flex gap-2 mt-7 items-center">
+          <div className="min-[400px]:col-span-2 flex gap-2 mt-4 items-center">
             <button className="btn btn-ghost text-sm !py-2" onClick={() => closeNow(t)}>Close now</button>
             <button className="text-sm underline muted" onClick={() => { if (confirm(`Remove this ${t.ticker} trade without recording a result?`)) remove(t); }}>Remove</button>
           </div>
@@ -116,7 +116,7 @@ export default function Paper({ store, setStore, toast, signedIn = false, onSign
         {closed.slice().reverse().map(t => (
           <div key={t.id} className="row flex items-center justify-between num text-sm">
             <span><span className="font-semibold">{t.ticker}</span> {t.side === "long" ? "buy" : "sell"} at {fmtPrice(t.entry)}</span>
-            <span>{LABEL[t.result!.status] ?? t.result!.status}, <b style={{ color: (t.result?.r ?? 0) >= 0 ? "var(--violet)" : "var(--rust)" }}>{(t.result?.r ?? 0) >= 0 ? "+" : ""}{usd((t.result?.r ?? 0) * t.risk_usd)}</b></span>
+            <span>{LABEL[t.result!.status] ?? t.result!.status}, <b style={{ color: (t.result?.r ?? 0) >= 0 ? "var(--violet)" : "var(--rust)" }}>{sign((t.result?.r ?? 0) * t.risk_usd)}</b></span>
           </div>
         ))}
       </>}

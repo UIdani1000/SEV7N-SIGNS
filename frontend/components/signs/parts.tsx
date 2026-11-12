@@ -25,7 +25,8 @@ export function LiveTag({ at, stale }: { at: number | null; stale: boolean }) {
     {stale ? `Live prices paused, last update ${sec}s ago` : `Live, updated ${sec < 2 ? "just now" : `${sec}s ago`}`}</span>;
 }
 
-/** The price ladder: stop, entry and target as rungs, with the live price pinned between them. */
+/** The price ladder: stop, entry and target as rungs, with the live price pinned between them.
+ *  Labels keep a minimum gap so close levels never print on top of each other; the "Now" line sits in normal flow below. */
 export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry" | "sl" | "tp" | "side">; price?: number | null; height?: number }) {
   const top = sig.side === "long" ? sig.tp : sig.sl, bottom = sig.side === "long" ? sig.sl : sig.tp;
   const span = Math.abs(top - bottom) || 1;
@@ -34,26 +35,29 @@ export function Ladder({ sig, price, height = 220 }: { sig: Pick<Signal, "entry"
     { k: "Target", v: sig.tp, c: "var(--violet)" },
     { k: "Entry", v: sig.entry, c: "var(--ink)" },
     { k: "Stop", v: sig.sl, c: "var(--rust)" },
-  ];
+  ].map(r => ({ ...r, px: y(r.v) / 100 * height })).sort((a, b) => a.px - b.px);
+  const GAP = 22;                                                     // px between label rows
+  for (let i = 1; i < rungs.length; i++) rungs[i].px = Math.max(rungs[i].px, rungs[i - 1].px + GAP);
+  const over = rungs[rungs.length - 1].px - height;                    // pushed past the bottom: shift everything up
+  if (over > 0) { rungs[rungs.length - 1].px = height; for (let i = rungs.length - 2; i >= 0; i--) rungs[i].px = Math.min(rungs[i].px, rungs[i + 1].px - GAP); }
   const gainTop = Math.min(y(sig.tp), y(sig.entry)), gainH = Math.abs(y(sig.tp) - y(sig.entry));
   const riskTop = Math.min(y(sig.sl), y(sig.entry)), riskH = Math.abs(y(sig.sl) - y(sig.entry));
+  const r = price != null && isFinite(price) ? (price - sig.entry) / Math.abs(sig.entry - sig.sl) * (sig.side === "long" ? 1 : -1) : null;
   return (
-    <div className="ladder num" style={{ height }} aria-label={`Stop ${fmtPrice(sig.sl)}, entry ${fmtPrice(sig.entry)}, target ${fmtPrice(sig.tp)}`}>
-      <div className="zone-gain" style={{ top: `${gainTop}%`, height: `${gainH}%`, left: -4 }} />
-      <div className="zone-risk" style={{ top: `${riskTop}%`, height: `${riskH}%`, left: -4 }} />
-      {rungs.map(r => (
-        <div key={r.k} className="rung" style={{ top: `${y(r.v)}%` }}>
-          <span className="dot" style={{ background: r.c }} />
-          <span className="tag" style={{ color: r.c }}>{r.k}</span>
-          <span className="lvl">{fmtPrice(r.v)}</span>
-        </div>
-      ))}
-      {price != null && isFinite(price) && <div className="price-pin" style={{ top: `${y(price)}%` }} />}
-      {price != null && isFinite(price) && (
-        <div className="absolute left-3 text-xs num" style={{ top: `calc(100% + 0.9rem)` }}>
-          Now <b>{fmtPrice(price)}</b>, {(() => { const r = (price - sig.entry) / Math.abs(sig.entry - sig.sl) * (sig.side === "long" ? 1 : -1); return `${r >= 0 ? "+" : ""}${r.toFixed(2)}R from entry`; })()}
-        </div>
-      )}
+    <div>
+      <div className="ladder num" style={{ height }} aria-label={`Stop ${fmtPrice(sig.sl)}, entry ${fmtPrice(sig.entry)}, target ${fmtPrice(sig.tp)}`}>
+        <div className="zone-gain" style={{ top: `${gainTop}%`, height: `${gainH}%`, left: -4 }} />
+        <div className="zone-risk" style={{ top: `${riskTop}%`, height: `${riskH}%`, left: -4 }} />
+        {rungs.map(g => (
+          <div key={g.k} className="rung" style={{ top: g.px }}>
+            <span className="dot" style={{ background: g.c }} />
+            <span className="tag" style={{ color: g.c }}>{g.k}</span>
+            <span className="lvl">{fmtPrice(g.v)}</span>
+          </div>
+        ))}
+        {r != null && <div className="price-pin" style={{ top: `${y(price!)}%` }} />}
+      </div>
+      {r != null && <div className="text-xs num mt-4">Now <b>{fmtPrice(price!)}</b>, {r >= 0 ? "+" : ""}{r.toFixed(2)}R from entry</div>}
     </div>
   );
 }
