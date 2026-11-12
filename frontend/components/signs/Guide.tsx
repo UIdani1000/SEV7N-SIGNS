@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Signal, getCandles, fmtPrice } from "@/lib/signs";
-import { GUIDES, CORE, LEGEND, Guide, GuideKey, Overlay } from "@/lib/guides";
+import { LEGEND, Guide, Overlay } from "@/lib/guides";
 import { Candle, ema, squeeze, macdHist } from "@/lib/indicators";
 
 const SHOW = 80;
@@ -103,36 +103,9 @@ export function IndicatorChart({ symbol, g, levels, refresh }: { symbol: string;
         </>}
       </svg>
       <figcaption className="mt-2 grid gap-1 text-xs muted">
-        <span>{g.chart} candles: each one is {PERIOD[g.tf]} of trading. Latest price {fmtPrice(c[c.length - 1].c)}.</span>
+        <span>{g.chart} candles ({PERIOD[g.tf]} each), last {fmtPrice(c[c.length - 1].c)}</span>
         {g.overlays.map(o => <span key={o}>{LEGEND[o]}</span>)}
       </figcaption>
     </figure>
-  );
-}
-
-/** "How the strategies work": every guide with a live example chart. */
-export default function Strategies({ onHighRisk }: { onHighRisk: () => void }) {
-  const [open, setOpen] = useState<GuideKey>("weekly");
-  const order: GuideKey[] = [...CORE, "scalp"];
-  return (
-    <section className="max-w-3xl mx-auto px-5 pt-6 pb-32">
-      <h1 className="display text-6xl sm:text-7xl">How the strategies work</h1>
-      <p className="muted mt-2 max-w-prose">Each strategy watches one chart and waits for its own setup. Signals tell you which strategy fired, so look it up here: what it wants to see, how fast to enter and what to expect.</p>
-      <div className="flex flex-wrap gap-2 mt-6" role="tablist">
-        {order.map(k => <button key={k} role="tab" aria-selected={open === k} className={`pill !py-2 !px-4 ${open === k ? "pill-short" : ""}`}
-          style={GUIDES[k].practice && open !== k ? { color: "var(--rust)" } : {}} onClick={() => setOpen(k)}>{GUIDES[k].name}</button>)}
-      </div>
-      <div className="mt-6" role="tabpanel">
-        <StrategyGuide g={GUIDES[open]} />
-        <p className="text-sm font-semibold mt-6">What it looks like now on {GUIDES[open].example.replace("USDT", "")}</p>
-        <div className="mt-2"><IndicatorChart symbol={GUIDES[open].example} g={GUIDES[open]} /></div>
-        {open === "scalp" && <button className="btn btn-ghost mt-4" onClick={onHighRisk}>Open High Risk Mode</button>}
-      </div>
-      <div className="mt-10 text-sm max-w-prose grid gap-2">
-        <p className="font-semibold">Reading the numbers</p>
-        <p>Every trade has a stop (where you accept the loss) and a target (where you take profit). The core strategies aim to win 3 times what they risk, so they can lose most trades and still come out ahead.</p>
-        <p>Losing runs are part of every strategy here. Risk a small, fixed amount on each trade, around 1% of the account, so a bad run doesn’t sink you.</p>
-      </div>
-    </section>
   );
 }
